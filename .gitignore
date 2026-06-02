@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Miscellaneous
 *.class
 *.log
@@ -43,3 +44,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+=======
+google-services.json
+serviceAccountKey.json
+*.keystore
+.env
+>>>>>>> 6f72a830d5a07c96a4fc88e82abb61f78d74b67d
