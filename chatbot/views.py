@@ -1,30 +1,35 @@
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
+import json
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from .chatbot import get_chatbot_response  # import from chatbot.py we just created
 
 
-@api_view(['POST'])
-def chatbot_response(request):
-    message = request.data.get("message", "").lower()
+# --- CHATBOT VIEW ---
+@csrf_exempt  # Flutter needs this — without it POST requests will be blocked
+@require_http_methods(["POST"])  # only accept POST requests
+def chatbot_reply(request):
+    try:
+        # Read JSON data sent from Flutter
+        data = json.loads(request.body)
 
-    if any(word in message for word in ["stress", "anxiety", "worried", "nervous", "pressure"]):
-        reply = "Take short breaks. Practice deep breathing. You are not alone."
+        # Get the message from the JSON
+        message = data.get("message", "")
 
-    elif any(word in message for word in ["exam", "study", "marks", "fail", "grades", "test"]):
-        reply = "Make a study schedule. Revision is key. Believe in yourself!"
+        # If Flutter sent empty message, return error
+        if not message:
+            return JsonResponse({"error": "No message provided"}, status=400)
 
-    elif any(word in message for word in ["sad", "depressed", "unhappy", "cry", "alone", "lonely"]):
-        reply = "It is okay to feel sad. Please talk to a counsellor. We are here for you."
+        # Get reply from our chatbot logic
+        reply = get_chatbot_response(message)
 
-    elif any(word in message for word in ["motivate", "motivation", "give up", "tired", "hopeless", "lost"]):
-        reply = "Every day is a new beginning. Small steps lead to big success!"
+        # Send reply back to Flutter
+        return JsonResponse({"reply": reply})
 
-    elif any(word in message for word in ["counselling", "book", "appointment", "session", "help"]):
-        reply = "You can book a counselling session from the Appointments section."
+    except json.JSONDecodeError:
+        # If JSON was invalid or broken
+        return JsonResponse({"error": "Invalid JSON format"}, status=400)
 
-    elif any(word in message for word in ["hi", "hello", "hey", "good morning", "good evening"]):
-        reply = "Hello! I am UniBot. How can I help you today?"
-
-    else:
-        reply = "I understand. Please consider talking to a counsellor for better support."
-
-    return Response({"reply": reply})
+    except Exception as e:
+        # Catch any other unexpected errors
+        return JsonResponse({"error": str(e)}, status=500)

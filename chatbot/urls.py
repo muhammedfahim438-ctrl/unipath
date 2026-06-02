@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import chatbot_response
+from . import views  # import views from this chatbot app
 
 urlpatterns = [
-    path('', chatbot_response),
+    # POST /chatbot/ → calls chatbot_reply function in views.py
+    path('chatbot/', views.chatbot_reply),
 ]
