@@ -1,0 +1,8 @@
+$kind: http-request
+name: https://postman-echo.com/get
+url: http://127.0.0.1:8000/api/chatbot/
+method: POST
+body:
+  type: json
+  content: "{\r\n  \"message\": \"hello\"\r\n}"
+order: 1780397092426
