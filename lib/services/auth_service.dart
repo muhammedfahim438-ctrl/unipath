@@ -17,17 +17,29 @@ class AuthService {
 
   // ─── Get profile from local cache ─────────────────────────
   static Future<Map<String, dynamic>?> getCachedProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString('profile');
-    if (data != null) return jsonDecode(data);
-    return null;
+  final prefs = await SharedPreferences.getInstance();
+  final data = prefs.getString('profile');
+  if (data != null) {
+    try {
+      final decoded = jsonDecode(data) as Map<String, dynamic>;
+      // Clear old cache if department is old value
+      final oldDepts = [
+        'Computer Science', 'IOT', 'Biology',
+        'Physics', 'Mathematics', 'Chemistry',
+        'Commerce', 'Arts'
+      ];
+      if (oldDepts.contains(decoded['department'])) {
+        await prefs.remove('profile');
+        return null;
+      }
+      return decoded;
+    } catch (e) {
+      await prefs.remove('profile');
+      return null;
+    }
   }
-
-  // ─── Clear cache on logout ─────────────────────────────────
-  static Future<void> clearCache() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('profile');
-  }
+  return null;
+}
 
   // ─── Check if mobile already registered ───────────────────
   static Future<bool> isMobileRegistered(String mobile) async {
@@ -225,11 +237,11 @@ class AuthService {
     }
   }
 
-  // ─── Logout ────────────────────────────────────────────────
-  static Future<void> logout() async {
-    await clearCache();
-    await _auth.signOut();
-  }
+  // ─── Clear cache ───────────────────────────────────────────
+static Future<void> clearCache() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove('profile');
+}
 
   // ─── Current user ──────────────────────────────────────────
   static User? get currentUser => _auth.currentUser;

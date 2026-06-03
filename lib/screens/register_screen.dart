@@ -25,10 +25,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isLoading = false;
 
   final List<String> _genders = ['Male', 'Female', 'Other'];
-  final List<String> _departments = [
-    'Computer Science', 'IOT', 'Biology', 'Physics',
-    'Mathematics', 'Chemistry', 'Commerce', 'Arts'
-  ];
+
+
+final List<String> _departments = [
+  // School of Commerce
+  'B.Com Computer Applications',
+  'B.Com Professional Accounting',
+  'B.Com Information Technology',
+  'B.Com Banking',
+  'B.Com Business Analytics',
+  'B.Com Accounting & Finance',
+  'M.Com Finance and Control',
+  // School of Computational Science
+  'B.Sc Computer Science',
+  'BCA',
+  'B.Sc Information Technology',
+  'B.Sc AI & ML',
+  'B.Sc Computer Science with Data Science',
+  'B.Sc Internet of Things',
+  'BCA Business Analytics',
+  'M.Sc Data Science',
+  // School of Life Sciences
+  'B.Sc Biotechnology',
+  'B.Sc Microbiology',
+  'B.Sc Food Science and Nutrition',
+  'M.Sc Biotechnology',
+  'M.Sc Microbiology',
+  'M.Sc Food Science and Nutrition',
+  // School of Management
+  'BBA Computer Applications',
+  'BBA International Business',
+  'BBA Logistics',
+  'BBA Aviation Management',
+  // School of Creative Sciences
+  'B.Sc CS & HM',
+  'B.Sc Costume Design and Fashion',
+  'B.Sc Visual Communication',
+  // School of Investigative Science
+  'B.Sc Digital and Cyber Forensic Science',
+  'B.A Criminology',
+  'B.Sc Forensic Science',
+  'B.Sc Psychology',
+  'M.A Criminology',
+  'M.Sc Forensic Science',
+  // School of Liberal Arts
+  'B.A English Literature',
+  'Master of Social Work',
+];
   final List<String> _years = [
     '1st Year', '2nd Year', '3rd Year', '4th Year'
   ];

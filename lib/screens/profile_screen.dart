@@ -39,10 +39,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _loadProfile();
-  }
+void initState() {
+  super.initState();
+  _clearOldCacheAndLoad();
+}
+
+Future<void> _clearOldCacheAndLoad() async {
+  // Force clear all old cache first
+  await AuthService.clearCache();
+  // Then load fresh from Firebase
+  await _loadProfile();
+}
 
   @override
   void dispose() {
@@ -63,10 +70,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _yearOfPassingController.text = data['yearOfPassing'] ?? '';
 
     final genders = ['Male', 'Female', 'Other'];
-    final departments = [
-      'Computer Science', 'IOT', 'Biology', 'Physics',
-      'Mathematics', 'Chemistry', 'Commerce', 'Arts'
-    ];
+     
+   final List<String> departments = [
+  // School of Commerce
+  'B.Com Computer Applications',
+  'B.Com Professional Accounting',
+  'B.Com Information Technology',
+  'B.Com Banking',
+  'B.Com Business Analytics',
+  'B.Com Accounting & Finance',
+  'M.Com Finance and Control',
+  // School of Computational Science
+  'B.Sc Computer Science',
+  'BCA',
+  'B.Sc Information Technology',
+  'B.Sc AI & ML',
+  'B.Sc Computer Science with Data Science',
+  'B.Sc Internet of Things',
+  'BCA Business Analytics',
+  'M.Sc Data Science',
+  // School of Life Sciences
+  'B.Sc Biotechnology',
+  'B.Sc Microbiology',
+  'B.Sc Food Science and Nutrition',
+  'M.Sc Biotechnology',
+  'M.Sc Microbiology',
+  'M.Sc Food Science and Nutrition',
+  // School of Management
+  'BBA Computer Applications',
+  'BBA International Business',
+  'BBA Logistics',
+  'BBA Aviation Management',
+  // School of Creative Sciences
+  'B.Sc CS & HM',
+  'B.Sc Costume Design and Fashion',
+  'B.Sc Visual Communication',
+  // School of Investigative Science
+  'B.Sc Digital and Cyber Forensic Science',
+  'B.A Criminology',
+  'B.Sc Forensic Science',
+  'B.Sc Psychology',
+  'M.A Criminology',
+  'M.Sc Forensic Science',
+  // School of Liberal Arts
+  'B.A English Literature',
+  'Master of Social Work',
+   ];
     final years = [
       '1st Year', '2nd Year', '3rd Year', '4th Year'
     ];
@@ -75,19 +124,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ];
 
     _selectedGender = genders.contains(data['gender'])
-        ? data['gender']
-        : 'Male';
-    _selectedDepartment =
-        departments.contains(data['department'])
-            ? data['department']
-            : 'Computer Science';
-    _selectedYear = years.contains(data['year'])
-        ? data['year']
-        : '1st Year';
-    _selected12thMajor =
-        majors.contains(data['major12th'])
-            ? data['major12th']
-            : 'Science';
+    ? data['gender'] : genders[0];
+
+_selectedDepartment = departments.contains(data['department'])
+    ? data['department'] : departments[0];
+
+_selectedYear = years.contains(data['year'])
+    ? data['year'] : years[0];
+
+_selected12thMajor = majors.contains(data['major12th'])
+    ? data['major12th'] : majors[0];
   }
 
   // ─── Load profile ──────────────────────────────────────────
@@ -100,7 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final mobile = user.phoneNumber ?? '';
     setState(() => _mobileNumber = mobile);
 
-    print('DEBUG mobile: $mobile'); // check this
+  
 
     // Load from cache FIRST
     final cached = await AuthService.getCachedProfile();
