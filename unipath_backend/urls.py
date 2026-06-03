@@ -9,4 +9,7 @@ urlpatterns = [
 
     # Task 2 — CSV Report
     path('', include('reports.urls')),
+
+    # Task 3 — Analytics
+    path('', include('analytics_api.urls')),
 ]
