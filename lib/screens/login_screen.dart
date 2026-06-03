@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../services/auth_service.dart';
 import 'otp_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,41 +11,69 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _phoneController = TextEditingController();
+  final _phoneController = TextEditingController();
   bool _isLoading = false;
 
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   Future<void> _sendOTP() async {
-    if (_phoneController.text.length != 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid 10-digit number')),
-      );
+    final phone = _phoneController.text.trim();
+
+    // Validate
+    if (phone.isEmpty) {
+      _showError('Please enter your mobile number');
+      return;
+    }
+    if (phone.length != 10 || !RegExp(r'^[0-9]+$').hasMatch(phone)) {
+      _showError('Enter a valid 10-digit mobile number');
       return;
     }
 
     setState(() => _isLoading = true);
 
-    await FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: '+91${_phoneController.text}',
-      verificationCompleted: (PhoneAuthCredential credential) {},
-      verificationFailed: (FirebaseAuthException e) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.message}')),
-        );
-      },
-      codeSent: (String verificationId, int? resendToken) {
+    // Check if mobile is registered
+    final isRegistered = await AuthService.isMobileRegistered(phone);
+    if (!isRegistered) {
+      setState(() => _isLoading = false);
+      _showError('Mobile number not registered! Please register first.');
+      return;
+    }
+
+    // Send OTP
+    await AuthService.sendOTP(
+      mobile: phone,
+      onCodeSent: (verificationId) {
         setState(() => _isLoading = false);
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => OTPScreen(
               verificationId: verificationId,
-              phoneNumber: _phoneController.text,
+              phoneNumber: phone,
             ),
           ),
         );
       },
-      codeAutoRetrievalTimeout: (String verificationId) {},
+      onError: (error) {
+        setState(() => _isLoading = false);
+        _showError('Failed to send OTP: $error');
+      },
     );
   }
 
@@ -52,6 +81,14 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF5B21B6)),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28.0),
@@ -66,79 +103,70 @@ class _LoginScreenState extends State<LoginScreen> {
                   color: const Color(0xFFEDE9FE),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Icon(
-                  Icons.school,
-                  size: 50,
-                  color: Color(0xFF5B21B6),
-                ),
+                child: const Icon(Icons.school,
+                    size: 50, color: Color(0xFF5B21B6)),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'UniPath',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF5B21B6),
-                ),
-              ),
-              const Text(
-                'Care. Support. Grow.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF6B7280),
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
+              const Text('UniPath',
+                  style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF5B21B6))),
+              const Text('Care. Support. Grow.',
+                  style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF6B7280),
+                      fontStyle: FontStyle.italic)),
               const SizedBox(height: 50),
+
+              // Mobile number label
               const Align(
                 alignment: Alignment.centerLeft,
-                child: Text(
-                  'Mobile Number',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF3B0764),
+                child: Text('Mobile Number',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF3B0764))),
+              ),
+              const SizedBox(height: 8),
+
+              // Phone input
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: '98765 43210',
+                  hintStyle: const TextStyle(
+                      color: Color(0xFFD1D5DB)),
+                  prefixIcon: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 14),
+                    child: const Text('🇮🇳 +91',
+                        style: TextStyle(fontSize: 14)),
+                  ),
+                  prefixIconConstraints: const BoxConstraints(
+                      minWidth: 0, minHeight: 0),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                        color: Color(0xFF5B21B6)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                        color: Color(0xFF5B21B6), width: 2),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: Colors.red),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              // Phone input
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFF5B21B6)),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: const Text(
-                        '🇮🇳 +91',
-                        style: TextStyle(fontSize: 16),
-                      ),
-                    ),
-                    Container(
-                      width: 1,
-                      height: 40,
-                      color: const Color(0xFF5B21B6),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        maxLength: 10,
-                        decoration: const InputDecoration(
-                          hintText: '98765 43210',
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12),
-                          counterText: '',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               const SizedBox(height: 28),
+
               // Send OTP Button
               SizedBox(
                 width: double.infinity,
@@ -148,36 +176,37 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF5B21B6),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Send OTP',
+                      ? const CircularProgressIndicator(
+                          color: Colors.white)
+                      : const Text('Send OTP',
                           style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                              fontSize: 16,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Register link
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Text('New here? ',
                       style: TextStyle(color: Color(0xFF6B7280))),
                   GestureDetector(
-                    onTap: () {},
-                    child: const Text(
-                      'Register now',
-                      style: TextStyle(
-                        color: Color(0xFF5B21B6),
-                        fontWeight: FontWeight.w600,
-                      ),
+                    onTap: () => Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) =>
+                              const RegisterScreen()),
                     ),
+                    child: const Text('Register now',
+                        style: TextStyle(
+                            color: Color(0xFF5B21B6),
+                            fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
