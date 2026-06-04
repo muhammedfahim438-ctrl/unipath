@@ -18,7 +18,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _yearOfPassingController = TextEditingController();
 
   String _selectedGender = 'Male';
-  String _selectedDepartment = 'Computer Science';
+  String _selectedDepartment = 'B.Sc Computer Science';
   String _selectedYear = '1st Year';
   String _selected12thMajor = 'Science';
   String _mobileNumber = '';
@@ -28,8 +28,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   final List<String> _genders = ['Male', 'Female', 'Other'];
   final List<String> _departments = [
-    'Computer Science', 'IOT', 'Biology', 'Physics',
-    'Mathematics', 'Chemistry', 'Commerce', 'Arts'
+    'B.Com Computer Applications',
+    'B.Com Professional Accounting',
+    'B.Com Information Technology',
+    'B.Com Banking',
+    'B.Com Business Analytics',
+    'B.Com Accounting & Finance',
+    'M.Com Finance and Control',
+    'B.Sc Computer Science',
+    'BCA',
+    'B.Sc Information Technology',
+    'B.Sc AI & ML',
+    'B.Sc Computer Science with Data Science',
+    'B.Sc Internet of Things',
+    'BCA Business Analytics',
+    'M.Sc Data Science',
+    'B.Sc Biotechnology',
+    'B.Sc Microbiology',
+    'B.Sc Food Science and Nutrition',
+    'M.Sc Biotechnology',
+    'M.Sc Microbiology',
+    'M.Sc Food Science and Nutrition',
+    'BBA Computer Applications',
+    'BBA International Business',
+    'BBA Logistics',
+    'BBA Aviation Management',
+    'B.Sc CS & HM',
+    'B.Sc Costume Design and Fashion',
+    'B.Sc Visual Communication',
+    'B.Sc Digital and Cyber Forensic Science',
+    'B.A Criminology',
+    'B.Sc Forensic Science',
+    'B.Sc Psychology',
+    'M.A Criminology',
+    'M.Sc Forensic Science',
+    'B.A English Literature',
+    'Master of Social Work',
   ];
   final List<String> _years = [
     '1st Year', '2nd Year', '3rd Year', '4th Year'
@@ -39,17 +73,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ];
 
   @override
-void initState() {
-  super.initState();
-  _clearOldCacheAndLoad();
-}
-
-Future<void> _clearOldCacheAndLoad() async {
-  // Force clear all old cache first
-  await AuthService.clearCache();
-  // Then load fresh from Firebase
-  await _loadProfile();
-}
+  void initState() {
+    super.initState();
+    _clearOldCacheAndLoad();
+  }
 
   @override
   void dispose() {
@@ -61,163 +88,117 @@ Future<void> _clearOldCacheAndLoad() async {
     super.dispose();
   }
 
-  // ─── Fill all fields ───────────────────────────────────────
+  // ─── Force clear old cache and load fresh ─────────────────
+  Future<void> _clearOldCacheAndLoad() async {
+    await AuthService.clearCache();
+    await _loadProfile();
+  }
+
+  // ─── Fill all fields from data ─────────────────────────────
   void _fillFields(Map<String, dynamic> data) {
     _nameController.text = data['name'] ?? '';
     _emailController.text = data['email'] ?? '';
     _dobController.text = data['dob'] ?? '';
-    _parentContactController.text = data['parentContact'] ?? '';
-    _yearOfPassingController.text = data['yearOfPassing'] ?? '';
+    _parentContactController.text =
+        data['parentContact'] ?? '';
+    _yearOfPassingController.text =
+        data['yearOfPassing'] ?? '';
 
-    final genders = ['Male', 'Female', 'Other'];
-     
-   final List<String> departments = [
-  // School of Commerce
-  'B.Com Computer Applications',
-  'B.Com Professional Accounting',
-  'B.Com Information Technology',
-  'B.Com Banking',
-  'B.Com Business Analytics',
-  'B.Com Accounting & Finance',
-  'M.Com Finance and Control',
-  // School of Computational Science
-  'B.Sc Computer Science',
-  'BCA',
-  'B.Sc Information Technology',
-  'B.Sc AI & ML',
-  'B.Sc Computer Science with Data Science',
-  'B.Sc Internet of Things',
-  'BCA Business Analytics',
-  'M.Sc Data Science',
-  // School of Life Sciences
-  'B.Sc Biotechnology',
-  'B.Sc Microbiology',
-  'B.Sc Food Science and Nutrition',
-  'M.Sc Biotechnology',
-  'M.Sc Microbiology',
-  'M.Sc Food Science and Nutrition',
-  // School of Management
-  'BBA Computer Applications',
-  'BBA International Business',
-  'BBA Logistics',
-  'BBA Aviation Management',
-  // School of Creative Sciences
-  'B.Sc CS & HM',
-  'B.Sc Costume Design and Fashion',
-  'B.Sc Visual Communication',
-  // School of Investigative Science
-  'B.Sc Digital and Cyber Forensic Science',
-  'B.A Criminology',
-  'B.Sc Forensic Science',
-  'B.Sc Psychology',
-  'M.A Criminology',
-  'M.Sc Forensic Science',
-  // School of Liberal Arts
-  'B.A English Literature',
-  'Master of Social Work',
-   ];
-    final years = [
-      '1st Year', '2nd Year', '3rd Year', '4th Year'
-    ];
-    final majors = [
-      'Science', 'Commerce', 'Arts', 'Vocational'
-    ];
+    _selectedGender = _genders.contains(data['gender'])
+        ? data['gender']
+        : _genders[0];
 
-    _selectedGender = genders.contains(data['gender'])
-    ? data['gender'] : genders[0];
+    _selectedDepartment =
+        _departments.contains(data['department'])
+            ? data['department']
+            : _departments[0];
 
-_selectedDepartment = departments.contains(data['department'])
-    ? data['department'] : departments[0];
+    _selectedYear = _years.contains(data['year'])
+        ? data['year']
+        : _years[0];
 
-_selectedYear = years.contains(data['year'])
-    ? data['year'] : years[0];
-
-_selected12thMajor = majors.contains(data['major12th'])
-    ? data['major12th'] : majors[0];
+    _selected12thMajor =
+        _majors.contains(data['major12th'])
+            ? data['major12th']
+            : _majors[0];
   }
 
-  // ─── Load profile ──────────────────────────────────────────
+  // ─── Load profile from Firebase ───────────────────────────
   Future<void> _loadProfile() async {
-  try {
-    final user = AuthService.currentUser;
-    if (user == null) return;
+    try {
+      final user = AuthService.currentUser;
+      if (user == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
-    // Get exact phone number from Firebase Auth
-    final mobile = user.phoneNumber ?? '';
-    setState(() => _mobileNumber = mobile);
+      final mobile = user.phoneNumber ?? '';
+      if (mounted) setState(() => _mobileNumber = mobile);
 
-  
-
-    // Load from cache FIRST
-    final cached = await AuthService.getCachedProfile();
-    if (cached != null && mounted) {
-      _fillFields(cached);
-      setState(() => _isLoading = false);
-      return;
+      final data =
+          await AuthService.getStudentProfile(mobile);
+      if (data != null && mounted) {
+        _fillFields(data);
+      }
+      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    // No cache — fetch from Firebase
-    final data = await AuthService.getStudentProfile(mobile);
-    if (data != null && mounted) {
-      _fillFields(data);
-    }
-    if (mounted) setState(() => _isLoading = false);
-  } catch (e) {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   // ─── Save updated profile ──────────────────────────────────
-Future<void> _saveProfile() async {
-  if (!_formKey.currentState!.validate()) return;
-  setState(() => _isSaving = true);
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
 
-  try {
-    // Get current user phone number
-    final user = AuthService.currentUser;
-    final mobile = user?.phoneNumber ?? _mobileNumber;
+    try {
+      final user = AuthService.currentUser;
+      final mobile = user?.phoneNumber ?? _mobileNumber;
 
-    await AuthService.updateStudentProfile(
-      mobile: mobile,
-      data: {
-        'name': _nameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'gender': _selectedGender,
-        'dob': _dobController.text.trim(),
-        'department': _selectedDepartment,
-        'year': _selectedYear,
-        'major12th': _selected12thMajor,
-        'yearOfPassing': _yearOfPassingController.text.trim(),
-        'parentContact': _parentContactController.text.trim(),
-      },
-    );
+      await AuthService.updateStudentProfile(
+        mobile: mobile,
+        data: {
+          'name': _nameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'gender': _selectedGender,
+          'dob': _dobController.text.trim(),
+          'department': _selectedDepartment,
+          'year': _selectedYear,
+          'major12th': _selected12thMajor,
+          'yearOfPassing':
+              _yearOfPassingController.text.trim(),
+          'parentContact':
+              _parentContactController.text.trim(),
+        },
+      );
 
-    if (!mounted) return;
-    setState(() {
-      _isSaving = false;
-      _isEditing = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Profile updated successfully!'),
-        backgroundColor: const Color(0xFF5B21B6),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    setState(() => _isSaving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Error: $e'),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _isEditing = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              const Text('Profile updated successfully!'),
+          backgroundColor: const Color(0xFF5B21B6),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
-}
 
   // ─── Go to dashboard ───────────────────────────────────────
   void _goToDashboard() {
@@ -229,7 +210,7 @@ Future<void> _saveProfile() async {
     );
   }
 
-  // ─── Read only field (mobile) ──────────────────────────────
+  // ─── Read only field ───────────────────────────────────────
   Widget _buildReadOnlyField(String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,8 +228,8 @@ Future<void> _saveProfile() async {
           decoration: BoxDecoration(
             color: const Color(0xFFF3F4F6),
             borderRadius: BorderRadius.circular(10),
-            border:
-                Border.all(color: const Color(0xFFE5E7EB)),
+            border: Border.all(
+                color: const Color(0xFFE5E7EB)),
           ),
           child: Row(
             children: [
@@ -377,10 +358,12 @@ Future<void> _saveProfile() async {
         IgnorePointer(
           ignoring: !_isEditing,
           child: DropdownButtonFormField<String>(
-  initialValue: value,
+            initialValue: value,
+            isExpanded: true,
             items: items
                 .map((e) => DropdownMenuItem(
-                    value: e, child: Text(e)))
+                    value: e, child: Text(e,
+                    overflow: TextOverflow.ellipsis)))
                 .toList(),
             onChanged: onChanged,
             decoration: InputDecoration(
@@ -472,13 +455,14 @@ Future<void> _saveProfile() async {
                               width: 28,
                               height: 28,
                               decoration: BoxDecoration(
-                                color:
-                                    const Color(0xFF5B21B6),
+                                color: const Color(
+                                    0xFF5B21B6),
                                 borderRadius:
                                     BorderRadius.circular(
                                         14),
                               ),
-                              child: const Icon(Icons.edit,
+                              child: const Icon(
+                                  Icons.edit,
                                   size: 16,
                                   color: Colors.white),
                             ),
@@ -507,10 +491,9 @@ Future<void> _saveProfile() async {
                     _buildReadOnlyField(
                         'Mobile Number', _mobileNumber),
 
-                    // ── All other fields ──
+                    // ── All fields ──
                     _buildTextField(
-                        'Full Name', _nameController,
-                        fieldType: 'name'),
+                        'Full Name', _nameController),
                     _buildTextField(
                         'Email Address', _emailController,
                         type: TextInputType.emailAddress,
@@ -555,7 +538,7 @@ Future<void> _saveProfile() async {
 
                     const SizedBox(height: 20),
 
-                    // ── Go to Dashboard (view mode) ──
+                    // ── Go to Dashboard ──
                     if (!_isEditing)
                       SizedBox(
                         width: double.infinity,
@@ -580,7 +563,7 @@ Future<void> _saveProfile() async {
                         ),
                       ),
 
-                    // ── Save/Cancel (edit mode) ──
+                    // ── Save/Cancel ──
                     if (_isEditing)
                       Row(
                         children: [
@@ -588,22 +571,24 @@ Future<void> _saveProfile() async {
                             child: OutlinedButton(
                               onPressed: () => setState(
                                   () => _isEditing = false),
-                              style: OutlinedButton.styleFrom(
+                              style:
+                                  OutlinedButton.styleFrom(
                                 side: const BorderSide(
                                     color:
                                         Color(0xFF5B21B6)),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(
-                                            12)),
-                                padding:
-                                    const EdgeInsets.symmetric(
-                                        vertical: 14),
+                                shape:
+                                    RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius
+                                                .circular(
+                                                    12)),
+                                padding: const EdgeInsets
+                                    .symmetric(vertical: 14),
                               ),
                               child: const Text('Cancel',
                                   style: TextStyle(
-                                      color:
-                                          Color(0xFF5B21B6),
+                                      color: Color(
+                                          0xFF5B21B6),
                                       fontWeight:
                                           FontWeight.w600)),
                             ),
@@ -614,25 +599,29 @@ Future<void> _saveProfile() async {
                               onPressed: _isSaving
                                   ? null
                                   : _saveProfile,
-                              style: ElevatedButton.styleFrom(
+                              style:
+                                  ElevatedButton.styleFrom(
                                 backgroundColor:
                                     const Color(0xFF5B21B6),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(
-                                            12)),
-                                padding:
-                                    const EdgeInsets.symmetric(
-                                        vertical: 14),
+                                shape:
+                                    RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius
+                                                .circular(
+                                                    12)),
+                                padding: const EdgeInsets
+                                    .symmetric(vertical: 14),
                               ),
                               child: _isSaving
                                   ? const CircularProgressIndicator(
                                       color: Colors.white)
                                   : const Text('Save',
                                       style: TextStyle(
-                                          color: Colors.white,
+                                          color:
+                                              Colors.white,
                                           fontWeight:
-                                              FontWeight.w600)),
+                                              FontWeight
+                                                  .w600)),
                             ),
                           ),
                         ],

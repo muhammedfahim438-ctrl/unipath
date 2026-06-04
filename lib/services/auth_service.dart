@@ -8,38 +8,45 @@ class AuthService {
   static final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
 
-  // ─── Save profile to local cache ──────────────────────────
+  // ─── Cache profile locally ─────────────────────────────────
   static Future<void> _cacheProfile(
       Map<String, dynamic> data) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('profile', jsonEncode(data));
   }
 
-  // ─── Get profile from local cache ─────────────────────────
+  // ─── Get cached profile ────────────────────────────────────
   static Future<Map<String, dynamic>?> getCachedProfile() async {
-  final prefs = await SharedPreferences.getInstance();
-  final data = prefs.getString('profile');
-  if (data != null) {
-    try {
-      final decoded = jsonDecode(data) as Map<String, dynamic>;
-      // Clear old cache if department is old value
-      final oldDepts = [
-        'Computer Science', 'IOT', 'Biology',
-        'Physics', 'Mathematics', 'Chemistry',
-        'Commerce', 'Arts'
-      ];
-      if (oldDepts.contains(decoded['department'])) {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString('profile');
+    if (data != null) {
+      try {
+        final decoded =
+            jsonDecode(data) as Map<String, dynamic>;
+        // Clear old cache if department is old value
+        const oldDepts = [
+          'Computer Science', 'IOT', 'Biology',
+          'Physics', 'Mathematics', 'Chemistry',
+          'Commerce', 'Arts'
+        ];
+        if (oldDepts.contains(decoded['department'])) {
+          await prefs.remove('profile');
+          return null;
+        }
+        return decoded;
+      } catch (e) {
         await prefs.remove('profile');
         return null;
       }
-      return decoded;
-    } catch (e) {
-      await prefs.remove('profile');
-      return null;
     }
+    return null;
   }
-  return null;
-}
+
+  // ─── Clear cache ───────────────────────────────────────────
+  static Future<void> clearCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('profile');
+  }
 
   // ─── Check if mobile already registered ───────────────────
   static Future<bool> isMobileRegistered(String mobile) async {
@@ -88,13 +95,11 @@ class AuthService {
       'isProfileComplete': true,
     };
 
-    // Save to Firestore
     await _firestore
         .collection('students')
         .doc('+91$mobile')
         .set(data);
 
-    // Cache locally for fast access
     await _cacheProfile(data);
   }
 
@@ -106,7 +111,8 @@ class AuthService {
   }) async {
     await _auth.verifyPhoneNumber(
       phoneNumber: '+91$mobile',
-      verificationCompleted: (PhoneAuthCredential credential) {},
+      verificationCompleted:
+          (PhoneAuthCredential credential) {},
       verificationFailed: (FirebaseAuthException e) {
         onError(e.message ?? 'Verification failed');
       },
@@ -122,8 +128,7 @@ class AuthService {
     required String verificationId,
     required String otp,
   }) async {
-    PhoneAuthCredential credential =
-        PhoneAuthProvider.credential(
+    final credential = PhoneAuthProvider.credential(
       verificationId: verificationId,
       smsCode: otp,
     );
@@ -132,23 +137,8 @@ class AuthService {
     return result.user;
   }
 
-  // ─── Get student profile (cache first, then Firebase) ─────
+  // ─── Get student profile ───────────────────────────────────
   static Future<Map<String, dynamic>?> getStudentProfile(
-      String mobile) async {
-    // Try cache first — instant!
-    final cached = await getCachedProfile();
-    if (cached != null) {
-      // Sync Firebase in background
-      _syncProfileFromFirebase(mobile);
-      return cached;
-    }
-
-    // No cache → fetch from Firebase
-    return await _fetchFromFirebase(mobile);
-  }
-
-  // ─── Fetch from Firebase ───────────────────────────────────
-  static Future<Map<String, dynamic>?> _fetchFromFirebase(
       String mobile) async {
     try {
       final doc = await _firestore
@@ -160,52 +150,48 @@ class AuthService {
         await _cacheProfile(data);
         return data;
       }
+      // Try searching by mobile field
+      final query = await _firestore
+          .collection('students')
+          .where('mobile', isEqualTo: mobile)
+          .get();
+      if (query.docs.isNotEmpty) {
+        final data = query.docs.first.data();
+        await _cacheProfile(data);
+        return data;
+      }
     } catch (e) {
       return null;
     }
     return null;
   }
 
-  // ─── Sync Firebase in background ──────────────────────────
-  static Future<void> _syncProfileFromFirebase(
-      String mobile) async {
+  // ─── Update student profile ────────────────────────────────
+  static Future<void> updateStudentProfile({
+    required String mobile,
+    required Map<String, dynamic> data,
+  }) async {
+    // Try direct document update
     try {
-      final doc = await _firestore
-          .collection('students')
-          .doc(mobile)
-          .get();
+      final docRef =
+          _firestore.collection('students').doc(mobile);
+      final doc = await docRef.get();
       if (doc.exists) {
-        await _cacheProfile(doc.data()!);
+        await docRef.update(data);
+      } else {
+        // Search by mobile field
+        final query = await _firestore
+            .collection('students')
+            .where('mobile', isEqualTo: mobile)
+            .get();
+        if (query.docs.isNotEmpty) {
+          await query.docs.first.reference.update(data);
+        } else {
+          throw Exception('Profile not found!');
+        }
       }
     } catch (e) {
-      // Silent fail — cache still works
-    }
-  }
-
-  // ─── Update student profile ────────────────────────────────
- static Future<void> updateStudentProfile({
-  required String mobile,
-  required Map<String, dynamic> data,
-}) async {
-  // Try exact mobile first
-  try {
-    final docRef = _firestore.collection('students').doc(mobile);
-    final doc = await docRef.get();
-    
-    if (doc.exists) {
-      await docRef.update(data);
-    } else {
-      // Try finding by mobile field
-      final query = await _firestore
-          .collection('students')
-          .where('mobile', isEqualTo: mobile)
-          .get();
-      
-      if (query.docs.isNotEmpty) {
-        await query.docs.first.reference.update(data);
-      } else {
-        throw Exception('Profile not found!');
-      }
+      rethrow;
     }
 
     // Update cache
@@ -214,34 +200,32 @@ class AuthService {
       cached.addAll(data);
       await _cacheProfile(cached);
     }
-  } catch (e) {
-    rethrow;
   }
-}
 
   // ─── Check if profile exists ───────────────────────────────
   static Future<bool> profileExists(String mobile) async {
-    // Check cache first
-    final cached = await getCachedProfile();
-    if (cached != null) return true;
-
-    // Check Firebase
     try {
       final doc = await _firestore
           .collection('students')
           .doc(mobile)
           .get();
-      return doc.exists;
+      if (doc.exists) return true;
+
+      final query = await _firestore
+          .collection('students')
+          .where('mobile', isEqualTo: mobile)
+          .get();
+      return query.docs.isNotEmpty;
     } catch (e) {
       return false;
     }
   }
 
-  // ─── Clear cache ───────────────────────────────────────────
-static Future<void> clearCache() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.remove('profile');
-}
+  // ─── Logout ────────────────────────────────────────────────
+  static Future<void> logout() async {
+    await clearCache();
+    await _auth.signOut();
+  }
 
   // ─── Current user ──────────────────────────────────────────
   static User? get currentUser => _auth.currentUser;

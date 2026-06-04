@@ -19,62 +19,63 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _yearOfPassingController = TextEditingController();
 
   String _selectedGender = 'Male';
-  String _selectedDepartment = 'Computer Science';
+  String _selectedDepartment = 'B.Sc Computer Science';
   String _selectedYear = '1st Year';
   String _selected12thMajor = 'Science';
   bool _isLoading = false;
 
   final List<String> _genders = ['Male', 'Female', 'Other'];
 
+  final List<String> _departments = [
+    // School of Commerce
+    'B.Com Computer Applications',
+    'B.Com Professional Accounting',
+    'B.Com Information Technology',
+    'B.Com Banking',
+    'B.Com Business Analytics',
+    'B.Com Accounting & Finance',
+    'M.Com Finance and Control',
+    // School of Computational Science
+    'B.Sc Computer Science',
+    'BCA',
+    'B.Sc Information Technology',
+    'B.Sc AI & ML',
+    'B.Sc Computer Science with Data Science',
+    'B.Sc Internet of Things',
+    'BCA Business Analytics',
+    'M.Sc Data Science',
+    // School of Life Sciences
+    'B.Sc Biotechnology',
+    'B.Sc Microbiology',
+    'B.Sc Food Science and Nutrition',
+    'M.Sc Biotechnology',
+    'M.Sc Microbiology',
+    'M.Sc Food Science and Nutrition',
+    // School of Management
+    'BBA Computer Applications',
+    'BBA International Business',
+    'BBA Logistics',
+    'BBA Aviation Management',
+    // School of Creative Sciences
+    'B.Sc CS & HM',
+    'B.Sc Costume Design and Fashion',
+    'B.Sc Visual Communication',
+    // School of Investigative Science
+    'B.Sc Digital and Cyber Forensic Science',
+    'B.A Criminology',
+    'B.Sc Forensic Science',
+    'B.Sc Psychology',
+    'M.A Criminology',
+    'M.Sc Forensic Science',
+    // School of Liberal Arts
+    'B.A English Literature',
+    'Master of Social Work',
+  ];
 
-final List<String> _departments = [
-  // School of Commerce
-  'B.Com Computer Applications',
-  'B.Com Professional Accounting',
-  'B.Com Information Technology',
-  'B.Com Banking',
-  'B.Com Business Analytics',
-  'B.Com Accounting & Finance',
-  'M.Com Finance and Control',
-  // School of Computational Science
-  'B.Sc Computer Science',
-  'BCA',
-  'B.Sc Information Technology',
-  'B.Sc AI & ML',
-  'B.Sc Computer Science with Data Science',
-  'B.Sc Internet of Things',
-  'BCA Business Analytics',
-  'M.Sc Data Science',
-  // School of Life Sciences
-  'B.Sc Biotechnology',
-  'B.Sc Microbiology',
-  'B.Sc Food Science and Nutrition',
-  'M.Sc Biotechnology',
-  'M.Sc Microbiology',
-  'M.Sc Food Science and Nutrition',
-  // School of Management
-  'BBA Computer Applications',
-  'BBA International Business',
-  'BBA Logistics',
-  'BBA Aviation Management',
-  // School of Creative Sciences
-  'B.Sc CS & HM',
-  'B.Sc Costume Design and Fashion',
-  'B.Sc Visual Communication',
-  // School of Investigative Science
-  'B.Sc Digital and Cyber Forensic Science',
-  'B.A Criminology',
-  'B.Sc Forensic Science',
-  'B.Sc Psychology',
-  'M.A Criminology',
-  'M.Sc Forensic Science',
-  // School of Liberal Arts
-  'B.A English Literature',
-  'Master of Social Work',
-];
   final List<String> _years = [
     '1st Year', '2nd Year', '3rd Year', '4th Year'
   ];
+
   final List<String> _majors = [
     'Science', 'Commerce', 'Arts', 'Vocational'
   ];
@@ -95,18 +96,17 @@ final List<String> _departments = [
     setState(() => _isLoading = true);
 
     try {
-      // Check duplicate mobile
       final exists = await AuthService.isMobileRegistered(
           _phoneController.text.trim());
       if (exists) {
         if (mounted) {
           setState(() => _isLoading = false);
-          _showError('This mobile number is already registered! Please login.');
+          _showError(
+              'This mobile number is already registered! Please login.');
         }
         return;
       }
 
-      // Register student
       await AuthService.registerStudent(
         mobile: _phoneController.text.trim(),
         name: _nameController.text.trim(),
@@ -122,64 +122,7 @@ final List<String> _departments = [
 
       if (mounted) {
         setState(() => _isLoading = false);
-        // Show success then go to login
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEDE9FE),
-                    borderRadius: BorderRadius.circular(35),
-                  ),
-                  child: const Icon(Icons.check_circle,
-                      color: Color(0xFF5B21B6), size: 40),
-                ),
-                const SizedBox(height: 16),
-                const Text('Registration Successful!',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF3B0764))),
-                const SizedBox(height: 8),
-                const Text(
-                  'Your account has been created.\nPlease login with your mobile number.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 13, color: Color(0xFF6B7280)),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => const LoginScreen()),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF5B21B6),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: const Text('Go to Login',
-                        style: TextStyle(color: Colors.white)),
-                  ),
-                )
-              ],
-            ),
-          ),
-        );
+        _showSuccessDialog();
       }
     } catch (e) {
       if (mounted) {
@@ -197,6 +140,68 @@ final List<String> _departments = [
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEDE9FE),
+                borderRadius: BorderRadius.circular(35),
+              ),
+              child: const Icon(Icons.check_circle,
+                  color: Color(0xFF5B21B6), size: 40),
+            ),
+            const SizedBox(height: 16),
+            const Text('Registration Successful!',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF3B0764))),
+            const SizedBox(height: 8),
+            const Text(
+              'Your account has been created.\nPlease login with your mobile number.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 13, color: Color(0xFF6B7280)),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) =>
+                            const LoginScreen()),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF5B21B6),
+                  shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(10)),
+                ),
+                child: const Text('Go to Login',
+                    style: TextStyle(color: Colors.white)),
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
@@ -221,9 +226,20 @@ final List<String> _departments = [
           controller: controller,
           keyboardType: type,
           validator: (v) {
-            if (v == null || v.isEmpty) return '$label is required';
+            if (v == null || v.isEmpty) {
+              return '$label is required';
+            }
+            if (fieldType == 'name') {
+              if (v.length < 3) {
+                return 'Name must be at least 3 characters';
+              }
+              if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v)) {
+                return 'Name must contain only letters';
+              }
+            }
             if (fieldType == 'email') {
-              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+              if (!RegExp(
+                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
                   .hasMatch(v)) {
                 return 'Enter a valid email (must contain @)';
               }
@@ -241,7 +257,8 @@ final List<String> _departments = [
               }
             }
             if (fieldType == 'dob') {
-              if (!RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(v)) {
+              if (!RegExp(r'^\d{2}/\d{2}/\d{4}$')
+                  .hasMatch(v)) {
                 return 'Enter date as DD/MM/YYYY';
               }
             }
@@ -253,12 +270,6 @@ final List<String> _departments = [
               final yr = int.tryParse(v);
               if (yr == null || yr < 1990 || yr > 2030) {
                 return 'Enter a year between 1990 and 2030';
-              }
-            }
-            if (fieldType == 'name') {
-              if (v.length < 3) return 'Name must be at least 3 characters';
-              if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v)) {
-                return 'Name must contain only letters';
               }
             }
             return null;
@@ -281,12 +292,13 @@ final List<String> _departments = [
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Colors.red),
+              borderSide:
+                  const BorderSide(color: Colors.red),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide:
-                  const BorderSide(color: Colors.red, width: 2),
+              borderSide: const BorderSide(
+                  color: Colors.red, width: 2),
             ),
           ),
         ),
@@ -311,9 +323,13 @@ final List<String> _departments = [
                 color: Color(0xFF3B0764))),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-  initialValue: value,
+          initialValue: value,
+          isExpanded: true,
           items: items
-              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+              .map((e) => DropdownMenuItem(
+                  value: e,
+                  child: Text(e,
+                      overflow: TextOverflow.ellipsis)))
               .toList(),
           onChanged: onChanged,
           decoration: InputDecoration(
@@ -351,8 +367,11 @@ final List<String> _departments = [
           keyboardType: TextInputType.phone,
           maxLength: 10,
           validator: (v) {
-            if (v == null || v.isEmpty) return 'Mobile number is required';
-            if (v.length != 10 || !RegExp(r'^[0-9]+$').hasMatch(v)) {
+            if (v == null || v.isEmpty) {
+              return 'Mobile number is required';
+            }
+            if (v.length != 10 ||
+                !RegExp(r'^[0-9]+$').hasMatch(v)) {
               return 'Enter valid 10-digit mobile number';
             }
             return null;
@@ -368,8 +387,8 @@ final List<String> _departments = [
               child: const Text('🇮🇳 +91',
                   style: TextStyle(fontSize: 14)),
             ),
-            prefixIconConstraints:
-                const BoxConstraints(minWidth: 0, minHeight: 0),
+            prefixIconConstraints: const BoxConstraints(
+                minWidth: 0, minHeight: 0),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide:
@@ -382,12 +401,13 @@ final List<String> _departments = [
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Colors.red),
+              borderSide:
+                  const BorderSide(color: Colors.red),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide:
-                  const BorderSide(color: Colors.red, width: 2),
+              borderSide: const BorderSide(
+                  color: Colors.red, width: 2),
             ),
           ),
         ),
@@ -423,53 +443,80 @@ final List<String> _departments = [
             children: [
               const Text('Fill in your details',
                   style: TextStyle(
-                      fontSize: 14, color: Color(0xFF6B7280))),
+                      fontSize: 14,
+                      color: Color(0xFF6B7280))),
               const SizedBox(height: 24),
 
-              _buildTextField('Full Name', _nameController,
-                  fieldType: 'name', hint: 'Enter your full name'),
+              _buildTextField(
+                'Full Name',
+                _nameController,
+                fieldType: 'name',
+                hint: 'Enter your full name',
+              ),
 
               _buildPhoneField(),
 
-              _buildTextField('Email Address', _emailController,
-                  type: TextInputType.emailAddress,
-                  fieldType: 'email',
-                  hint: 'example@email.com'),
-
-              _buildDropdown('Gender', _selectedGender, _genders,
-                  (v) => setState(() => _selectedGender = v!)),
-
               _buildTextField(
-                  'Date of Birth', _dobController,
-                  fieldType: 'dob', hint: 'DD/MM/YYYY'),
+                'Email Address',
+                _emailController,
+                type: TextInputType.emailAddress,
+                fieldType: 'email',
+                hint: 'example@email.com',
+              ),
 
               _buildDropdown(
-                  'Department',
-                  _selectedDepartment,
-                  _departments,
-                  (v) => setState(() => _selectedDepartment = v!)),
+                'Gender',
+                _selectedGender,
+                _genders,
+                (v) => setState(() => _selectedGender = v!),
+              ),
 
-              _buildDropdown('Year', _selectedYear, _years,
-                  (v) => setState(() => _selectedYear = v!)),
+              _buildTextField(
+                'Date of Birth',
+                _dobController,
+                fieldType: 'dob',
+                hint: 'DD/MM/YYYY',
+              ),
 
               _buildDropdown(
-                  '12th Standard Major',
-                  _selected12thMajor,
-                  _majors,
-                  (v) => setState(() => _selected12thMajor = v!)),
+                'Department',
+                _selectedDepartment,
+                _departments,
+                (v) => setState(
+                    () => _selectedDepartment = v!),
+              ),
+
+              _buildDropdown(
+                'Year',
+                _selectedYear,
+                _years,
+                (v) =>
+                    setState(() => _selectedYear = v!),
+              ),
+
+              _buildDropdown(
+                '12th Standard Major',
+                _selected12thMajor,
+                _majors,
+                (v) => setState(
+                    () => _selected12thMajor = v!),
+              ),
 
               _buildTextField(
-                  'Year of Passing', _yearOfPassingController,
-                  type: TextInputType.number,
-                  fieldType: 'year',
-                  hint: 'e.g. 2024'),
+                'Year of Passing',
+                _yearOfPassingController,
+                type: TextInputType.number,
+                fieldType: 'year',
+                hint: 'e.g. 2024',
+              ),
 
               _buildTextField(
-                  'Parent Contact Number',
-                  _parentContactController,
-                  type: TextInputType.phone,
-                  fieldType: 'parentPhone',
-                  hint: '98765 43210'),
+                'Parent Contact Number',
+                _parentContactController,
+                type: TextInputType.phone,
+                fieldType: 'parentPhone',
+                hint: '98765 43210',
+              ),
 
               const SizedBox(height: 10),
 
@@ -479,9 +526,11 @@ final List<String> _departments = [
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _register,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF5B21B6),
+                    backgroundColor:
+                        const Color(0xFF5B21B6),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius:
+                            BorderRadius.circular(12)),
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(
@@ -490,20 +539,24 @@ final List<String> _departments = [
                           style: TextStyle(
                               fontSize: 16,
                               color: Colors.white,
-                              fontWeight: FontWeight.w600)),
+                              fontWeight:
+                                  FontWeight.w600)),
                 ),
               ),
               const SizedBox(height: 16),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Text('Already have an account? ',
-                      style: TextStyle(color: Color(0xFF6B7280))),
+                      style: TextStyle(
+                          color: Color(0xFF6B7280))),
                   GestureDetector(
                     onTap: () => Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
-                          builder: (context) => const LoginScreen()),
+                          builder: (context) =>
+                              const LoginScreen()),
                     ),
                     child: const Text('Login',
                         style: TextStyle(
