@@ -5,6 +5,8 @@ import 'appointments_screen.dart';
 import 'feedback_screen.dart';
 import 'chatbot_screen.dart';
 import 'profile_screen.dart';
+import '../services/auth_service.dart';
+import 'welcome_screen.dart';
 
 // ─────────────────────────────────────────
 //  Screen 7 — Student Dashboard
@@ -20,6 +22,36 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  String _studentName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStudentName();
+  }
+
+  Future<void> _loadStudentName() async {
+  // Try cache first
+  final cached = await AuthService.getCachedProfile();
+  if (cached != null && mounted) {
+    setState(() {
+      _studentName = cached['name'] ?? 'Student';
+    });
+    return;
+  }
+
+  // No cache — fetch from Firebase directly
+  final user = AuthService.currentUser;
+  if (user == null) return;
+
+  final mobile = user.phoneNumber ?? '';
+  final data = await AuthService.getStudentProfile(mobile);
+  if (data != null && mounted) {
+    setState(() {
+      _studentName = data['name'] ?? 'Student';
+    });
+  }
+}
 
   // Pages for bottom nav (index 0 = home/dashboard)
   void _onNavTap(int index) {
@@ -44,6 +76,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+  backgroundColor: AppColors.background,
+  elevation: 0,
+  automaticallyImplyLeading: false,
+  actions: [
+    IconButton(
+      icon: const Icon(Icons.logout_rounded,
+          color: AppColors.primary),
+      onPressed: () {
+  AuthService.logout().then((_) {
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      // ignore: use_build_context_synchronously
+      context,
+      MaterialPageRoute(
+          builder: (_) => const WelcomeScreen()),
+      (route) => false,
+    );
+  });
+},
+      
+    ),
+  ],
+),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -58,9 +114,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          'Hello, John! 👋',
+                      children: [
+  Text(
+    'Hello, $_studentName! 👋',
                           style: TextStyle(
                             color: AppColors.primaryDark,
                             fontSize: 24,
