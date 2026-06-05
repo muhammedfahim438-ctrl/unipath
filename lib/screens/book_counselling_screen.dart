@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'booking_confirmation_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/auth_service.dart';
 
 // ─────────────────────────────────────────
 //  Screen 8 — Book Counselling
@@ -19,6 +21,7 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
   DateTime? _selectedDate;
   String? _selectedTime;
   int? _selectedSlot;
+  bool _isLoading = false;
 
   final List<String> _times = [
     '12:00 PM',
@@ -82,36 +85,114 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
   return days;
 }
 
-  void _confirmBooking() {
-    if (_selectedDate == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Please select a date')));
-      return;
-    }
-    if (_selectedTime == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Please select a time')));
-      return;
-    }
-    if (_selectedSlot == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Please select a slot')));
-      return;
-    }
+  Future<void> _confirmBooking() async {
+  if (_selectedDate == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a date')));
+    return;
+  }
+  if (_selectedTime == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a time')));
+    return;
+  }
+  if (_selectedSlot == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a slot')));
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  try {
+    // Get student details from cache
+    final cached = await AuthService.getCachedProfile();
+    final studentName = cached?['name'] ?? 'Student';
+    final studentDept = cached?['department'] ?? '';
+    final studentMobile = cached?['mobile'] ?? '';
+    final studentYear = cached?['year'] ?? '';
+
+    final dateStr =
+        '${_selectedDate!.day} ${_monthName(_selectedDate!.month)} ${_selectedDate!.year}';
+
+    // Save to Firestore
+    await FirebaseFirestore.instance
+        .collection('appointments')
+        .add({
+      'studentName': studentName,
+      'department': studentDept,
+      'mobile': studentMobile,
+      'year': studentYear,
+      'date': dateStr,
+      'dateTimestamp': _selectedDate,
+      'time': _selectedTime,
+      'slot': _slots[_selectedSlot!],
+      'session': 'Counselling Session',
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // Send notification to faculty
+    await _notifyFaculty(
+      studentName: studentName,
+      date: dateStr,
+      time: _selectedTime!,
+      slot: _slots[_selectedSlot!],
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => BookingConfirmationScreen(
-          date:
-              '${_selectedDate!.day} ${_monthName(_selectedDate!.month)} ${_selectedDate!.year}',
+          date: dateStr,
           time: _selectedTime!,
           slot: _slots[_selectedSlot!],
           session: 'Counselling Session',
         ),
       ),
     );
+  } catch (e) {
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Booking failed: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
+}
+
+Future<void> _notifyFaculty({
+  required String studentName,
+  required String date,
+  required String time,
+  required String slot,
+}) async {
+  try {
+    // Save notification to Firestore
+    // Faculty checks this collection for new bookings
+    await FirebaseFirestore.instance
+        .collection('notifications')
+        .add({
+      'type': 'new_booking',
+      'title': 'New Counselling Booking',
+      'message':
+          '$studentName has booked a session on $date at $time ($slot)',
+      'studentName': studentName,
+      'date': date,
+      'time': time,
+      'slot': slot,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  } catch (e) {
+    // Notification failure shouldn't block booking
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -384,24 +465,25 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
 
             // ── Confirm Booking Button ──
             SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _confirmBooking,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                child: const Text('Confirm Booking'),
-              ),
-            ),
+  width: double.infinity,
+  child: ElevatedButton(
+    onPressed: _isLoading ? null : _confirmBooking,
+    style: ElevatedButton.styleFrom(
+      backgroundColor: AppColors.primary,
+      foregroundColor: AppColors.white,
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+    ),
+    child: _isLoading
+        ? const CircularProgressIndicator(color: Colors.white)
+        : const Text('Confirm Booking',
+            style: TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w700)),
+  ),
+),
+            
 
             const SizedBox(height: 32),
           ],
