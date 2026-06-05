@@ -7,6 +7,7 @@ import 'chatbot_screen.dart';
 import 'profile_screen.dart';
 import '../services/auth_service.dart';
 import 'welcome_screen.dart';
+import '../services/quotes_service.dart';
 
 // ─────────────────────────────────────────
 //  Screen 7 — Student Dashboard
@@ -25,10 +26,86 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _studentName = '';
 
   @override
-  void initState() {
-    super.initState();
-    _loadStudentName();
-  }
+void initState() {
+  super.initState();
+  _loadStudentName();
+  _showDailyQuote();
+}
+
+Future<void> _showDailyQuote() async {
+  // Wait for screen to load first
+  await Future.delayed(const Duration(seconds: 1));
+
+  final shouldShow =
+      await QuotesService.shouldShowQuoteToday();
+  if (!shouldShow || !mounted) return;
+
+  final quote = await QuotesService.getDailyQuote();
+  if (quote == null || !mounted) return;
+
+  // Show quote popup
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: const Icon(Icons.format_quote_rounded,
+                color: AppColors.primary, size: 32),
+          ),
+          const SizedBox(height: 16),
+          const Text('Quote of the Day',
+              style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.grey,
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 12),
+          Text(
+            '"${quote['text'] ?? ''}"',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontSize: 16,
+                color: AppColors.primaryDark,
+                fontWeight: FontWeight.w600,
+                fontStyle: FontStyle.italic,
+                height: 1.5),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '— ${quote['author'] ?? 'Unknown'}',
+            style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Start my day! 🌟',
+                  style: TextStyle(color: AppColors.white)),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   Future<void> _loadStudentName() async {
   // Try cache first
