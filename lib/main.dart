@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'screens/welcome_screen.dart';
 import 'theme.dart';
+import 'screens/splash_screen.dart';
+
+// change home: to:
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +23,7 @@ class UniPathApp extends StatelessWidget {
       title: 'UniPath',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
-      home: const WelcomeScreen(),
+      home: const SplashScreen(),
     );
   }
 }
