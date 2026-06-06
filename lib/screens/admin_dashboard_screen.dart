@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import 'admin_appointments_screen.dart';
 import 'admin_feedback_screen.dart';
 import 'admin_analytics_screen.dart';
+import 'admin_examination_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -201,7 +202,11 @@ class _AdminDashboardScreenState
                         Icons.assignment_rounded,
                         AppColors.primary,
                         AppColors.primaryLight,
-                        () {},
+                        () => Navigator.push(
+  context,
+  MaterialPageRoute(
+      builder: (_) => const AdminExaminationScreen()),
+),
                       ),
                      _buildActionCard(
   'Appointments',
