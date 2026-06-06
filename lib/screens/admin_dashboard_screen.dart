@@ -5,6 +5,7 @@ import 'welcome_screen.dart';
 import '../services/auth_service.dart';
 import 'admin_appointments_screen.dart';
 import 'admin_feedback_screen.dart';
+import 'admin_analytics_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -218,7 +219,11 @@ class _AdminDashboardScreenState
                         Icons.bar_chart_rounded,
                         AppColors.green,
                         const Color(0xFFDCFCE7),
-                        () {},
+                        () => Navigator.push(
+  context,
+  MaterialPageRoute(
+      builder: (_) => const AdminAnalyticsScreen()),
+),
                       ),
                       _buildActionCard(
                         'Feedback',
