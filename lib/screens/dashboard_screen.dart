@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'book_counselling_screen.dart';
 import 'appointments_screen.dart';
-import 'feedback_screen.dart';
 import 'chatbot_screen.dart';
 import 'profile_screen.dart';
 import '../services/auth_service.dart';
 import 'welcome_screen.dart';
 import '../services/quotes_service.dart';
+import 'feedback_thoughts_screen.dart';
 
 // ─────────────────────────────────────────
 //  Screen 7 — Student Dashboard
@@ -265,11 +265,11 @@ Future<void> _showDailyQuote() async {
                     title: 'Feedback &\nThoughts',
                     color: AppColors.orange,
                     lightColor: const Color(0xFFFFEDD5),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const FeedbackScreen()),
-                    ),
+                   onTap: () => Navigator.push(
+  context,
+  MaterialPageRoute(
+      builder: (_) => const FeedbackThoughtsScreen()),
+),
                   ),
                   _FeatureCard(
                     icon: Icons.smart_toy_rounded,

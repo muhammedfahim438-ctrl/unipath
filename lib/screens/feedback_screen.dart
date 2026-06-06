@@ -4,7 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
 
 class FeedbackScreen extends StatefulWidget {
-  const FeedbackScreen({super.key});
+  final bool showAppBar;
+  const FeedbackScreen({super.key, this.showAppBar = true});
 
   @override
   State<FeedbackScreen> createState() => _FeedbackScreenState();
@@ -134,7 +135,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
-      appBar: AppBar(
+      appBar: widget.showAppBar ? AppBar(
         backgroundColor: AppColors.white,
         elevation: 0,
         leading: IconButton(
@@ -147,7 +148,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 color: AppColors.primaryDark,
                 fontWeight: FontWeight.w800,
                 fontSize: 18)),
-      ),
+      ) : null,
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
