@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:unipath/screens/quiz_screen.dart';
 import '../theme.dart';
 import 'book_counselling_screen.dart';
 import 'appointments_screen.dart';
@@ -8,6 +9,7 @@ import '../services/auth_service.dart';
 import 'welcome_screen.dart';
 import '../services/quotes_service.dart';
 import 'feedback_thoughts_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // ─────────────────────────────────────────
 //  Screen 7 — Student Dashboard
@@ -30,6 +32,91 @@ void initState() {
   super.initState();
   _loadStudentName();
   _showDailyQuote();
+  _checkQuizForFirstYear();
+}
+
+Future<void> _checkQuizForFirstYear() async {
+  await Future.delayed(const Duration(seconds: 4));
+  if (!mounted) return;
+
+  final cached = await AuthService.getCachedProfile();
+  final year = cached?['year'] ?? '';
+  final mobile = AuthService.currentUser?.phoneNumber ?? '';
+
+  // Only for 1st year students
+  if (year != '1st Year') return;
+
+  // Check if already taken
+  final doc = await FirebaseFirestore.instance
+      .collection('learning_style_results')
+      .doc(mobile)
+      .get();
+
+  if (doc.exists || !mounted) return;
+
+  // Show quiz popup
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(35),
+            ),
+            child: const Icon(Icons.quiz_rounded,
+                color: AppColors.primary, size: 36),
+          ),
+          const SizedBox(height: 16),
+          const Text('Learning Style Quiz',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryDark)),
+          const SizedBox(height: 8),
+          const Text(
+            'As a 1st year student, please complete this quick quiz to help us understand your learning style!',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 13, color: AppColors.grey),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const QuizScreen()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Start Quiz',
+                  style: TextStyle(color: AppColors.white)),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Later',
+                style: TextStyle(color: AppColors.grey)),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 Future<void> _showDailyQuote() async {
