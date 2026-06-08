@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
-
+import '../services/chatbot_service.dart';
 // ─────────────────────────────────────────
 //  Screen 12 — Chatbot Support
 //  Save to: lib/screens/chatbot_screen.dart
@@ -70,37 +70,36 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   }
 
   void _sendMessage() {
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+  final text = _messageController.text.trim();
+  if (text.isEmpty) return;
 
-    setState(() {
-      _messages.add(_Message(
-        text: text,
-        isUser: true,
-        time: _currentTime(),
-      ));
-      _isTyping = true;
-    });
-    _messageController.clear();
-    _scrollToBottom();
+  setState(() {
+    _messages.add(_Message(
+      text: text,
+      isUser: true,
+      time: _currentTime(),
+    ));
+    _isTyping = true;
+  });
+  _messageController.clear();
+  _scrollToBottom();
 
-    // Simulate bot reply after 1.5 seconds
-    // In real app: Sreekuttan's Python chatbot handles this via API
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) {
-        setState(() {
-          _isTyping = false;
-          _messages.add(_Message(
-            text:
-                "Thank you for sharing that. Our counsellor can help you further. Would you like to book a session? 📅",
-            isUser: false,
-            time: _currentTime(),
-          ));
-        });
-        _scrollToBottom();
-      }
-    });
-  }
+  // Get response from ChatbotService
+  Future.delayed(const Duration(milliseconds: 1000), () {
+    if (mounted) {
+      final response = ChatbotService.getResponse(text);
+      setState(() {
+        _isTyping = false;
+        _messages.add(_Message(
+          text: response,
+          isUser: false,
+          time: _currentTime(),
+        ));
+      });
+      _scrollToBottom();
+    }
+  });
+}
 
   String _currentTime() {
     final now = TimeOfDay.now();
@@ -399,7 +398,7 @@ class _DotState extends State<_Dot> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _anim,
-      builder: (_, _) => Transform.translate(
+      builder: (_, child) => Transform.translate(
         offset: Offset(0, _anim.value),
         child: Container(
           width: 8,

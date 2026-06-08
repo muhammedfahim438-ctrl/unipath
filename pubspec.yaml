@@ -39,6 +39,8 @@ dependencies:
   cloud_firestore: ^6.5.0
   firebase_messaging: ^16.3.0
   shared_preferences: ^2.5.5
+  path_provider: ^2.1.5
+  share_plus: ^13.1.0
 
 dev_dependencies:
   flutter_test:

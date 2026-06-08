@@ -7,6 +7,7 @@ import 'admin_appointments_screen.dart';
 import 'admin_feedback_screen.dart';
 import 'admin_analytics_screen.dart';
 import 'admin_examination_screen.dart';
+import 'admin_csv_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -78,6 +79,20 @@ class _AdminDashboardScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+  onPressed: () => Navigator.push(
+    context,
+    MaterialPageRoute(
+        builder: (_) => const AdminCsvScreen()),
+  ),
+  backgroundColor: AppColors.primary,
+  icon: const Icon(Icons.download_rounded,
+      color: AppColors.white),
+  label: const Text('CSV Report',
+      style: TextStyle(
+          color: AppColors.white,
+          fontWeight: FontWeight.w600)),
+),
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
