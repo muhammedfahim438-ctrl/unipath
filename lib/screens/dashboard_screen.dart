@@ -29,12 +29,77 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   String _studentName = '';
+  Map<String, dynamic>? _nextAppointment; // ← NEW: holds nearest upcoming appt
 
   @override
   void initState() {
     super.initState();
     _loadStudentName();
+    _loadNextAppointment(); // ← NEW
     _checkQuizCompletion();
+  }
+
+  // ─── Load the nearest upcoming appointment for the banner ──
+  Future<void> _loadNextAppointment() async {
+    try {
+      final user = AuthService.currentUser;
+      final mobile = user?.phoneNumber ?? '';
+      if (mobile.isEmpty) return;
+
+      final snapshot = await FirebaseFirestore.instance
+          .collection('appointments')
+          .where('mobile', isEqualTo: mobile)
+          .where('status', whereIn: ['pending', 'confirmed'])
+          .get();
+
+      if (snapshot.docs.isEmpty) return;
+
+      // Pick the appointment whose date is closest to today
+      Map<String, dynamic>? nearest;
+      DateTime? nearestDate;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        data['id'] = doc.id;
+
+        // date field is stored as "DD MMM" e.g. "9 JUNE" or "20 May"
+        final dateStr = (data['date'] as String? ?? '').trim();
+        final parts = dateStr.split(' ');
+        if (parts.length < 2) continue;
+
+        try {
+          final day = int.parse(parts[0]);
+          final monthStr = parts[1];
+          const months = {
+            'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4,
+            'MAY': 5, 'JUN': 6, 'JUNE': 6, 'JUL': 7,
+            'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12,
+          };
+          final month = months[monthStr.toUpperCase()];
+          if (month == null) continue;
+
+          final now = DateTime.now();
+          var apptDate = DateTime(now.year, month, day);
+          // If the date has already passed this year, try next year
+          if (apptDate.isBefore(DateTime(now.year, now.month, now.day))) {
+            apptDate = DateTime(now.year + 1, month, day);
+          }
+
+          if (nearestDate == null || apptDate.isBefore(nearestDate)) {
+            nearestDate = apptDate;
+            nearest = data;
+          }
+        } catch (_) {
+          continue;
+        }
+      }
+
+      if (nearest != null && mounted) {
+        setState(() => _nextAppointment = nearest);
+      }
+    } catch (_) {
+      // Silently fail — banner just stays hidden
+    }
   }
 
   Future<void> _checkQuizCompletion() async {
@@ -415,61 +480,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 28),
 
               // ── Upcoming Appointment Banner ──
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      AppColors.primary,
-                      AppColors.primaryDark,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              // Only shown when the student has a real upcoming appointment
+              if (_nextAppointment != null)
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const AppointmentsScreen()),
                   ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: AppColors.white.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.event_rounded,
-                          color: AppColors.white, size: 26),
-                    ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Upcoming Session',
-                            style: TextStyle(
-                              color: AppColors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'May 20 • 12:00 PM • Slot 1',
-                            style: TextStyle(
-                              color: AppColors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          AppColors.primary,
+                          AppColors.primaryDark,
                         ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    const Icon(Icons.arrow_forward_ios_rounded,
-                        color: AppColors.white, size: 16),
-                  ],
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: AppColors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.event_rounded,
+                              color: AppColors.white, size: 26),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Upcoming Session',
+                                style: TextStyle(
+                                  color: AppColors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                // e.g. "9 JUNE • 05:00 PM • Slot 1"
+                                '${_nextAppointment!['date'] ?? ''}'
+                                ' • ${_nextAppointment!['time'] ?? ''}'
+                                ' • ${_nextAppointment!['slot'] ?? ''}',
+                                style: const TextStyle(
+                                  color: AppColors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios_rounded,
+                            color: AppColors.white, size: 16),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
 
               const SizedBox(height: 24),
             ],

@@ -33,48 +33,85 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
 
   // ─── Load appointments from Firebase ──────────────────────
   Future<void> _loadAppointments() async {
-  try {
-    final user = AuthService.currentUser;
-    final mobile = user?.phoneNumber ?? '';
+    try {
+      // ── Collect every possible identifier for this student ──
+      final user = AuthService.currentUser;
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('appointments')
-        .where('mobile', isEqualTo: mobile)
-        .get();
+      // 1. Phone number from FirebaseAuth (phone-OTP login)
+      final phoneMobile = user?.phoneNumber ?? '';
 
-    final upcoming = <Map<String, dynamic>>[];
-    final past = <Map<String, dynamic>>[];
+      // 2. Mobile saved in SharedPreferences (set at login/register)
+      final savedMobile = await AuthService.getLoggedInMobile() ?? '';
 
-    for (final doc in snapshot.docs) {
-      final data = doc.data();
-      data['id'] = doc.id;
+      // 3. Mobile & email stored in cached profile
+      final cached = await AuthService.getCachedProfile();
+      final cachedMobile = cached?['mobile'] as String? ?? '';
+      final cachedEmail  = cached?['email']  as String? ?? '';
 
-      final dateStr = data['date'] ?? '';
-      final parts = dateStr.split(' ');
-      if (parts.length >= 2) {
-        data['day'] = parts[0];
-        data['month'] = parts[1].toUpperCase();
+      // Build a de-duplicated set of non-empty mobile values to query
+      final mobilesToQuery = <String>{
+        if (phoneMobile.isNotEmpty) phoneMobile,
+        if (savedMobile.isNotEmpty) savedMobile,
+        if (cachedMobile.isNotEmpty) cachedMobile,
+      };
+
+      // ── Run queries for each mobile (+ email fallback) ──────
+      final allDocs = <String, Map<String, dynamic>>{};  // keyed by doc.id
+
+      for (final m in mobilesToQuery) {
+        final snap = await FirebaseFirestore.instance
+            .collection('appointments')
+            .where('mobile', isEqualTo: m)
+            .get();
+        for (final doc in snap.docs) {
+          allDocs[doc.id] = doc.data()..['id'] = doc.id;
+        }
       }
 
-      final status = data['status'] ?? 'pending';
-      if (status == 'completed' || status == 'cancelled') {
-        past.add(data);
-      } else {
-        upcoming.add(data);
+      // Email fallback — used when student logged in via email OTP
+      // and no phone number was stored
+      if (allDocs.isEmpty && cachedEmail.isNotEmpty) {
+        final snap = await FirebaseFirestore.instance
+            .collection('appointments')
+            .where('email', isEqualTo: cachedEmail)
+            .get();
+        for (final doc in snap.docs) {
+          allDocs[doc.id] = doc.data()..['id'] = doc.id;
+        }
       }
-    }
 
-    if (mounted) {
-      setState(() {
-        _upcomingAppointments = upcoming;
-        _pastAppointments = past;
-        _isLoading = false;
-      });
+      // ── Parse and sort into upcoming / past ─────────────────
+      final upcoming = <Map<String, dynamic>>[];
+      final past     = <Map<String, dynamic>>[];
+
+      for (final data in allDocs.values) {
+        // Parse "DD MMM" → separate day & month for the date badge
+        final dateStr = data['date'] as String? ?? '';
+        final parts = dateStr.split(' ');
+        if (parts.length >= 2) {
+          data['day']   = parts[0];
+          data['month'] = parts[1].toUpperCase();
+        }
+
+        final status = data['status'] as String? ?? 'pending';
+        if (status == 'completed' || status == 'cancelled') {
+          past.add(data);
+        } else {
+          upcoming.add(data);
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _upcomingAppointments = upcoming;
+          _pastAppointments     = past;
+          _isLoading            = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
     }
-  } catch (e) {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   // ─── Cancel appointment ────────────────────────────────────
   Future<void> _cancelAppointment(String id) async {
