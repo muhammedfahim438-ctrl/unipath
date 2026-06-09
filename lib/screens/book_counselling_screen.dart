@@ -17,11 +17,27 @@ class BookCounsellingScreen extends StatefulWidget {
 }
 
 class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
-  DateTime _focusedMonth = DateTime(2026, 5);
+  // ✅ FIX 1: Always start from the CURRENT month, not a hardcoded date
+  late DateTime _focusedMonth;
   DateTime? _selectedDate;
   String? _selectedTime;
   int? _selectedSlot;
   bool _isLoading = false;
+
+  // ✅ FIX 2: Compute today and the 30-day deadline once
+  final DateTime _today = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  );
+  late final DateTime _maxDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusedMonth = DateTime(_today.year, _today.month);
+    _maxDate = _today.add(const Duration(days: 30));
+  }
 
   final List<String> _times = [
     '12:00 PM',
@@ -33,18 +49,21 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
 
   final List<String> _slots = ['Slot 1', 'Slot 2', 'Slot 3', 'Slot 4'];
 
+  // ✅ FIX 3: Block going to a month before the current month
   void _previousMonth() {
-    setState(() {
-      _focusedMonth =
-          DateTime(_focusedMonth.year, _focusedMonth.month - 1);
-    });
+    final prevMonth = DateTime(_focusedMonth.year, _focusedMonth.month - 1);
+    if (!prevMonth.isBefore(DateTime(_today.year, _today.month))) {
+      setState(() => _focusedMonth = prevMonth);
+    }
   }
 
+  // ✅ FIX 4: Block going beyond the month that contains maxDate
   void _nextMonth() {
-    setState(() {
-      _focusedMonth =
-          DateTime(_focusedMonth.year, _focusedMonth.month + 1);
-    });
+    final nextMonth = DateTime(_focusedMonth.year, _focusedMonth.month + 1);
+    final maxMonth = DateTime(_maxDate.year, _maxDate.month);
+    if (!nextMonth.isAfter(maxMonth)) {
+      setState(() => _focusedMonth = nextMonth);
+    }
   }
 
   String _monthName(int month) {
@@ -55,150 +74,150 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
     return months[month - 1];
   }
 
+  // ✅ FIX 5: Holiday logic — every Sunday + 2nd & 3rd Saturday are holidays
+  bool _isHoliday(DateTime day) {
+    // Sunday (weekday == 7)
+    if (day.weekday == DateTime.sunday) return true;
+
+    // Saturday (weekday == 6) — check if it's the 2nd or 3rd Saturday
+    if (day.weekday == DateTime.saturday) {
+      // Count how many Saturdays have occurred in this month up to and including `day`
+      int saturdayCount = 0;
+      for (int d = 1; d <= day.day; d++) {
+        final dt = DateTime(day.year, day.month, d);
+        if (dt.weekday == DateTime.saturday) saturdayCount++;
+      }
+      // 2nd or 3rd Saturday → holiday
+      if (saturdayCount == 2 || saturdayCount == 3) return true;
+    }
+
+    return false;
+  }
+
   List<DateTime?> _buildCalendarDays() {
-  final firstDay =
-      DateTime(_focusedMonth.year, _focusedMonth.month, 1);
-  final lastDay =
-      DateTime(_focusedMonth.year, _focusedMonth.month + 1, 0);
-  final offset =
-      firstDay.weekday == 7 ? 0 : firstDay.weekday;
+    final firstDay = DateTime(_focusedMonth.year, _focusedMonth.month, 1);
+    final lastDay = DateTime(_focusedMonth.year, _focusedMonth.month + 1, 0);
+    // Offset: Mon=1 … Sun=7 → Mon column = 0
+    final offset = firstDay.weekday == 7 ? 0 : firstDay.weekday - 1;
 
-  // Use growable list instead of fixed-length!
-  List<DateTime?> days = [];
+    List<DateTime?> days = [];
 
-  // Add empty slots for offset
-  for (int i = 0; i < offset; i++) {
-    days.add(null);
+    for (int i = 0; i < offset; i++) {
+      days.add(null);
+    }
+    for (int i = 1; i <= lastDay.day; i++) {
+      days.add(DateTime(_focusedMonth.year, _focusedMonth.month, i));
+    }
+    while (days.length % 7 != 0) {
+      days.add(null);
+    }
+
+    return days;
   }
-
-  // Add actual days
-  for (int i = 1; i <= lastDay.day; i++) {
-    days.add(
-        DateTime(_focusedMonth.year, _focusedMonth.month, i));
-  }
-
-  // Fill remaining to complete the week
-  while (days.length % 7 != 0) {
-    days.add(null);
-  }
-
-  return days;
-}
 
   Future<void> _confirmBooking() async {
-  if (_selectedDate == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a date')));
-    return;
-  }
-  if (_selectedTime == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a time')));
-    return;
-  }
-  if (_selectedSlot == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a slot')));
-    return;
-  }
+    if (_selectedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a date')));
+      return;
+    }
+    if (_selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a time')));
+      return;
+    }
+    if (_selectedSlot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a slot')));
+      return;
+    }
 
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
 
-  try {
-    // Get student details from cache
-    final cached = await AuthService.getCachedProfile();
-    final studentName = cached?['name'] ?? 'Student';
-    final studentDept = cached?['department'] ?? '';
-    final studentMobile = cached?['mobile'] ?? '';
-    final studentYear = cached?['year'] ?? '';
+    try {
+      final cached = await AuthService.getCachedProfile();
+      final studentName = cached?['name'] ?? 'Student';
+      final studentDept = cached?['department'] ?? '';
+      final studentMobile = cached?['mobile'] ?? '';
+      final studentYear = cached?['year'] ?? '';
 
-    final dateStr =
-        '${_selectedDate!.day} ${_monthName(_selectedDate!.month)} ${_selectedDate!.year}';
+      final dateStr =
+          '${_selectedDate!.day} ${_monthName(_selectedDate!.month)} ${_selectedDate!.year}';
 
-    // Save to Firestore
-    await FirebaseFirestore.instance
-        .collection('appointments')
-        .add({
-      'studentName': studentName,
-      'department': studentDept,
-      'mobile': studentMobile,
-      'year': studentYear,
-      'date': dateStr,
-      'dateTimestamp': _selectedDate,
-      'time': _selectedTime,
-      'slot': _slots[_selectedSlot!],
-      'session': 'Counselling Session',
-      'status': 'pending',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+      await FirebaseFirestore.instance.collection('appointments').add({
+        'studentName': studentName,
+        'department': studentDept,
+        'mobile': studentMobile,
+        'year': studentYear,
+        'date': dateStr,
+        'dateTimestamp': _selectedDate,
+        'time': _selectedTime,
+        'slot': _slots[_selectedSlot!],
+        'session': 'Counselling Session',
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
-    // Send notification to faculty
-    await _notifyFaculty(
-      studentName: studentName,
-      date: dateStr,
-      time: _selectedTime!,
-      slot: _slots[_selectedSlot!],
-    );
+      await _notifyFaculty(
+        studentName: studentName,
+        date: dateStr,
+        time: _selectedTime!,
+        slot: _slots[_selectedSlot!],
+      );
 
-    if (!mounted) return;
-    setState(() => _isLoading = false);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BookingConfirmationScreen(
-          date: dateStr,
-          time: _selectedTime!,
-          slot: _slots[_selectedSlot!],
-          session: 'Counselling Session',
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BookingConfirmationScreen(
+            date: dateStr,
+            time: _selectedTime!,
+            slot: _slots[_selectedSlot!],
+            session: 'Counselling Session',
+          ),
         ),
-      ),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Booking failed: $e'),
-        backgroundColor: Colors.red,
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Booking failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
-}
 
-Future<void> _notifyFaculty({
-  required String studentName,
-  required String date,
-  required String time,
-  required String slot,
-}) async {
-  try {
-    // Save notification to Firestore
-    // Faculty checks this collection for new bookings
-    await FirebaseFirestore.instance
-        .collection('notifications')
-        .add({
-      'type': 'new_booking',
-      'title': 'New Counselling Booking',
-      'message':
-          '$studentName has booked a session on $date at $time ($slot)',
-      'studentName': studentName,
-      'date': date,
-      'time': time,
-      'slot': slot,
-      'isRead': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  } catch (e) {
-    // Notification failure shouldn't block booking
+  Future<void> _notifyFaculty({
+    required String studentName,
+    required String date,
+    required String time,
+    required String slot,
+  }) async {
+    try {
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'type': 'new_booking',
+        'title': 'New Counselling Booking',
+        'message': '$studentName has booked a session on $date at $time ($slot)',
+        'studentName': studentName,
+        'date': date,
+        'time': time,
+        'slot': slot,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      // Notification failure shouldn't block booking
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
     final days = _buildCalendarDays();
     final dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final today = DateTime.now();
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -226,7 +245,6 @@ Future<void> _notifyFaculty({
           children: [
             const SizedBox(height: 8),
 
-            // ── Section Label ──
             const Text(
               'Select Date',
               style: TextStyle(
@@ -242,16 +260,8 @@ Future<void> _notifyFaculty({
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.primaryLight, width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.06),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                color: AppColors.greyLight,
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 children: [
@@ -259,10 +269,19 @@ Future<void> _notifyFaculty({
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // ✅ Disable left arrow if already on current month
                       IconButton(
-                        onPressed: _previousMonth,
-                        icon: const Icon(Icons.chevron_left_rounded,
-                            color: AppColors.primary),
+                        onPressed: _focusedMonth.year == _today.year &&
+                                _focusedMonth.month == _today.month
+                            ? null
+                            : _previousMonth,
+                        icon: Icon(
+                          Icons.chevron_left_rounded,
+                          color: _focusedMonth.year == _today.year &&
+                                  _focusedMonth.month == _today.month
+                              ? AppColors.grey.withValues(alpha: 0.3)
+                              : AppColors.primary,
+                        ),
                       ),
                       Text(
                         '${_monthName(_focusedMonth.month)} ${_focusedMonth.year}',
@@ -272,10 +291,19 @@ Future<void> _notifyFaculty({
                           fontSize: 15,
                         ),
                       ),
+                      // ✅ Disable right arrow if next month is beyond maxDate's month
                       IconButton(
-                        onPressed: _nextMonth,
-                        icon: const Icon(Icons.chevron_right_rounded,
-                            color: AppColors.primary),
+                        onPressed: _focusedMonth.year == _maxDate.year &&
+                                _focusedMonth.month == _maxDate.month
+                            ? null
+                            : _nextMonth,
+                        icon: Icon(
+                          Icons.chevron_right_rounded,
+                          color: _focusedMonth.year == _maxDate.year &&
+                                  _focusedMonth.month == _maxDate.month
+                              ? AppColors.grey.withValues(alpha: 0.3)
+                              : AppColors.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -323,15 +351,24 @@ Future<void> _notifyFaculty({
                           _selectedDate!.month == day.month &&
                           _selectedDate!.year == day.year;
 
-                      final isToday = today.day == day.day &&
-                          today.month == day.month &&
-                          today.year == day.year;
+                      final isToday = _today.day == day.day &&
+                          _today.month == day.month &&
+                          _today.year == day.year;
 
-                      final isPast = day
-                          .isBefore(DateTime(today.year, today.month, today.day));
+                      // ✅ Past = before today
+                      final isPast = day.isBefore(_today);
+
+                      // ✅ Beyond 30-day window
+                      final isBeyondRange = day.isAfter(_maxDate);
+
+                      // ✅ Holiday = Sunday or 2nd/3rd Saturday
+                      final isHoliday = _isHoliday(day);
+
+                      // A day is disabled if it's past, beyond range, or a holiday
+                      final isDisabled = isPast || isBeyondRange || isHoliday;
 
                       return GestureDetector(
-                        onTap: isPast
+                        onTap: isDisabled
                             ? null
                             : () => setState(() => _selectedDate = day),
                         child: Container(
@@ -347,8 +384,8 @@ Future<void> _notifyFaculty({
                             child: Text(
                               '${day.day}',
                               style: TextStyle(
-                                color: isPast
-                                    ? AppColors.grey.withValues(alpha: 0.4)
+                                color: isDisabled
+                                    ? AppColors.grey.withValues(alpha: 0.35)
                                     : isSelected
                                         ? AppColors.white
                                         : isToday
@@ -394,17 +431,21 @@ Future<void> _notifyFaculty({
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isSelected ? AppColors.primary : AppColors.greyLight,
+                      color:
+                          isSelected ? AppColors.primary : AppColors.greyLight,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color:
-                            isSelected ? AppColors.primary : Colors.transparent,
+                        color: isSelected
+                            ? AppColors.primary
+                            : Colors.transparent,
                       ),
                     ),
                     child: Text(
                       time,
                       style: TextStyle(
-                        color: isSelected ? AppColors.white : AppColors.primaryDark,
+                        color: isSelected
+                            ? AppColors.white
+                            : AppColors.primaryDark,
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
                       ),
@@ -439,8 +480,9 @@ Future<void> _notifyFaculty({
                           right: index < _slots.length - 1 ? 10 : 0),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
-                        color:
-                            isSelected ? AppColors.primary : AppColors.greyLight,
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.greyLight,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Center(
@@ -465,25 +507,24 @@ Future<void> _notifyFaculty({
 
             // ── Confirm Booking Button ──
             SizedBox(
-  width: double.infinity,
-  child: ElevatedButton(
-    onPressed: _isLoading ? null : _confirmBooking,
-    style: ElevatedButton.styleFrom(
-      backgroundColor: AppColors.primary,
-      foregroundColor: AppColors.white,
-      padding: const EdgeInsets.symmetric(vertical: 18),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
-    ),
-    child: _isLoading
-        ? const CircularProgressIndicator(color: Colors.white)
-        : const Text('Confirm Booking',
-            style: TextStyle(
-                fontSize: 16, fontWeight: FontWeight.w700)),
-  ),
-),
-            
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _confirmBooking,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text('Confirm Booking',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700)),
+              ),
+            ),
 
             const SizedBox(height: 32),
           ],
