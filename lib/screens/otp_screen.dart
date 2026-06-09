@@ -5,13 +5,17 @@ import 'profile_screen.dart';
 import 'dashboard_screen.dart';
 
 class OTPScreen extends StatefulWidget {
-  final String verificationId;
-  final String phoneNumber;
+  final String email;
+  final String? verificationId;
+  final String? phoneNumber;
+  final bool isEmailOTP;
 
   const OTPScreen({
     super.key,
-    required this.verificationId,
-    required this.phoneNumber,
+    required this.email,
+    this.verificationId,
+    this.phoneNumber,
+    this.isEmailOTP = false,
   });
 
   @override
@@ -109,38 +113,82 @@ class _OTPScreenState extends State<OTPScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final user = await AuthService.verifyOTP(
-        verificationId: widget.verificationId,
-        otp: _otpCode,
-      );
+      if (widget.isEmailOTP) {
+        // Verify email-based OTP
+        final isValid = await AuthService.verifyEmailOTP(
+          email: widget.email,
+          otp: _otpCode,
+        );
 
-      if (user == null || !mounted) {
-        setState(() => _isLoading = false);
-        return;
-      }
+        if (!isValid) {
+          setState(() => _isLoading = false);
+          _showError('Invalid OTP! Please try again.');
+          for (final c in _controllers) {
+            c.clear();
+          }
+          _focusNodes[0].requestFocus();
+          return;
+        }
 
-      final mobile = '+91${widget.phoneNumber}';
-      final profileExists =
-          await AuthService.profileExists(mobile);
-
-      if (!mounted) return;
-
-      if (profileExists) {
-        await AuthService.getStudentProfile(mobile);
         if (!mounted) return;
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-              builder: (context) => const DashboardScreen()),
-          (route) => false,
-        );
+
+        final profileExists =
+            await AuthService.profileExistsByEmail(widget.email);
+
+        if (!mounted) return;
+
+        if (profileExists) {
+          await AuthService.getStudentProfileByEmail(widget.email);
+          if (!mounted) return;
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const DashboardScreen()),
+            (route) => false,
+          );
+        } else {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const ProfileScreen()),
+            (route) => false,
+          );
+        }
       } else {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-              builder: (context) => const ProfileScreen()),
-          (route) => false,
+        // Old phone-based OTP verification
+        final user = await AuthService.verifyOTP(
+          verificationId: widget.verificationId!,
+          otp: _otpCode,
         );
+
+        if (user == null || !mounted) {
+          setState(() => _isLoading = false);
+          return;
+        }
+
+        final mobile = '+91${widget.phoneNumber}';
+        final profileExists =
+            await AuthService.profileExists(mobile);
+
+        if (!mounted) return;
+
+        if (profileExists) {
+          await AuthService.getStudentProfile(mobile);
+          if (!mounted) return;
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const DashboardScreen()),
+            (route) => false,
+          );
+        } else {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const ProfileScreen()),
+            (route) => false,
+          );
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -160,16 +208,26 @@ class _OTPScreenState extends State<OTPScreen> {
     }
     _focusNodes[0].requestFocus();
 
-    await AuthService.sendOTP(
-      mobile: widget.phoneNumber,
-      onCodeSent: (verificationId) {
-        _startResendTimer();
-        _showSuccess('OTP resent successfully!');
-      },
-      onError: (error) {
-        _showError('Failed to resend OTP: $error');
-      },
-    );
+    try {
+      if (widget.isEmailOTP) {
+        await AuthService.sendEmailOTP(widget.email);
+      } else {
+        await AuthService.sendOTP(
+          mobile: widget.phoneNumber!,
+          onCodeSent: (verificationId) {
+            _startResendTimer();
+            _showSuccess('OTP resent successfully!');
+          },
+          onError: (error) {
+            _showError('Failed to resend OTP: $error');
+          },
+        );
+      }
+      _startResendTimer();
+      _showSuccess('OTP resent successfully!');
+    } catch (e) {
+      _showError('Failed to resend OTP: $e');
+    }
   }
 
   Widget _buildOTPBox(int index) {
@@ -272,7 +330,9 @@ class _OTPScreenState extends State<OTPScreen> {
                       color: Color(0xFF3B0764))),
               const SizedBox(height: 10),
               Text(
-                'Enter the 6-digit OTP sent to\n+91 ${widget.phoneNumber}',
+                widget.isEmailOTP
+                    ? 'Enter the 6-digit OTP sent to\n${widget.email}'
+                    : 'Enter the 6-digit OTP sent to\n+91 ${widget.phoneNumber}',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                     fontSize: 14, color: Color(0xFF6B7280)),

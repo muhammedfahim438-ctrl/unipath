@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
+import 'email_login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -186,8 +187,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                        builder: (context) =>
-                            const LoginScreen()),
+                      builder: (context) => const EmailLoginScreen(),
+                    ),
                   );
                 },
                 style: ElevatedButton.styleFrom(

@@ -17,7 +17,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 // ─────────────────────────────────────────
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  /// Pass quizJustCompleted: true when navigating here right after
+  /// the student finishes the quiz — skips the Firestore check entirely.
+  final bool quizJustCompleted;
+  const DashboardScreen({super.key, this.quizJustCompleted = false});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -28,194 +31,231 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _studentName = '';
 
   @override
-void initState() {
-  super.initState();
-  _loadStudentName();
-  _showDailyQuote();
-  _checkQuizForFirstYear();
-}
+  void initState() {
+    super.initState();
+    _loadStudentName();
+    _checkQuizCompletion();
+  }
 
-Future<void> _checkQuizForFirstYear() async {
-  await Future.delayed(const Duration(seconds: 4));
-  if (!mounted) return;
+  Future<void> _checkQuizCompletion() async {
+    await Future.delayed(const Duration(seconds: 1));
+    if (!mounted) return;
 
-  final cached = await AuthService.getCachedProfile();
-  final year = cached?['year'] ?? '';
-  final mobile = AuthService.currentUser?.phoneNumber ?? '';
+    // If the student JUST finished the quiz this session, skip the
+    // Firestore check entirely — we know it's done. Show quote directly.
+    if (widget.quizJustCompleted) {
+      _showDailyQuote();
+      return;
+    }
 
-  // Only for 1st year students
-  if (year != '1st Year') return;
+    // Get current user identity — do NOT clear cache here
+    final user = AuthService.currentUser;
+    final cached = await AuthService.getCachedProfile();
 
-  // Check if already taken
-  final doc = await FirebaseFirestore.instance
-      .collection('learning_style_results')
-      .doc(mobile)
-      .get();
+    if (cached == null && user == null) return;
 
-  if (doc.exists || !mounted) return;
+    // Determine the correct identifier to look up in Firestore
+    // FIX #5 (mirror): Check both email AND mobile so we always find the result
+    String emailId = cached?['email'] ?? '';
+    String mobileId = user?.phoneNumber ?? cached?['mobile'] ?? '';
 
-  // Show quiz popup
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 70,
-            height: 70,
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(35),
-            ),
-            child: const Icon(Icons.quiz_rounded,
-                color: AppColors.primary, size: 36),
-          ),
-          const SizedBox(height: 16),
-          const Text('Learning Style Quiz',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryDark)),
-          const SizedBox(height: 8),
-          const Text(
-            'As a 1st year student, please complete this quick quiz to help us understand your learning style!',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 13, color: AppColors.grey),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const QuizScreen()),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+    bool quizDone = false;
+
+    try {
+      // Check by email identifier
+      if (emailId.isNotEmpty) {
+        final docByEmail = await FirebaseFirestore.instance
+            .collection('learning_style_results')
+            .doc(emailId)
+            .get();
+        if (docByEmail.exists) quizDone = true;
+      }
+
+      // Check by mobile identifier
+      if (!quizDone && mobileId.isNotEmpty) {
+        final docByMobile = await FirebaseFirestore.instance
+            .collection('learning_style_results')
+            .doc(mobileId)
+            .get();
+        if (docByMobile.exists) quizDone = true;
+      }
+    } catch (e) {
+      // On error, assume quiz not done to be safe
+      quizDone = false;
+    }
+
+    if (!mounted) return;
+
+    if (quizDone) {
+      // Quiz already completed — show the daily quote normally
+      _showDailyQuote();
+    } else {
+      // FIX #3: Quiz is MANDATORY — no "Later" button, barrierDismissible: false
+      _showMandatoryQuizDialog();
+    }
+  }
+
+  void _showMandatoryQuizDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Cannot dismiss by tapping outside
+      builder: (context) => PopScope(
+        canPop: false, // Cannot dismiss with back button
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(35),
+                ),
+                child: const Icon(Icons.quiz_rounded,
+                    color: AppColors.primary, size: 36),
               ),
-              child: const Text('Start Quiz',
-                  style: TextStyle(color: AppColors.white)),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Later',
-                style: TextStyle(color: AppColors.grey)),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-Future<void> _showDailyQuote() async {
-  // Wait for screen to load first
-  await Future.delayed(const Duration(seconds: 1));
-
-  final shouldShow =
-      await QuotesService.shouldShowQuoteToday();
-  if (!shouldShow || !mounted) return;
-
-  final quote = await QuotesService.getDailyQuote();
-  if (quote == null || !mounted) return;
-
-  // Show quote popup
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: const Icon(Icons.format_quote_rounded,
-                color: AppColors.primary, size: 32),
-          ),
-          const SizedBox(height: 16),
-          const Text('Quote of the Day',
-              style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.grey,
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(height: 12),
-          Text(
-            '"${quote['text'] ?? ''}"',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 16,
-                color: AppColors.primaryDark,
-                fontWeight: FontWeight.w600,
-                fontStyle: FontStyle.italic,
-                height: 1.5),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '— ${quote['author'] ?? 'Unknown'}',
-            style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.primary,
-                fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+              const SizedBox(height: 16),
+              const Text('Learning Style Quiz',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryDark)),
+              const SizedBox(height: 8),
+              const Text(
+                'You must complete this quiz before accessing the dashboard. It helps us understand your learning style better!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 13, color: AppColors.grey),
               ),
-              child: const Text('Start my day! 🌟',
-                  style: TextStyle(color: AppColors.white)),
-            ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // Replace dashboard with QuizScreen. After quiz is done,
+                    // QuizScreen navigates to ResultScreen which navigates to
+                    // DashboardScreen(quizJustCompleted: true) — no loop.
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const QuizScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Start Quiz',
+                      style: TextStyle(color: AppColors.white)),
+                ),
+              ),
+              // FIX #3: "Later" button REMOVED — quiz is mandatory
+            ],
           ),
-        ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
+
+  Future<void> _showDailyQuote() async {
+    await Future.delayed(const Duration(seconds: 1));
+
+    final shouldShow = await QuotesService.shouldShowQuoteToday();
+    if (!shouldShow || !mounted) return;
+
+    final quote = await QuotesService.getDailyQuote();
+    if (quote == null || !mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: const Icon(Icons.format_quote_rounded,
+                  color: AppColors.primary, size: 32),
+            ),
+            const SizedBox(height: 16),
+            const Text('Quote of the Day',
+                style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.grey,
+                    fontWeight: FontWeight.w500)),
+            const SizedBox(height: 12),
+            Text(
+              '"${quote['text'] ?? ''}"',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 16,
+                  color: AppColors.primaryDark,
+                  fontWeight: FontWeight.w600,
+                  fontStyle: FontStyle.italic,
+                  height: 1.5),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '— ${quote['author'] ?? 'Unknown'}',
+              style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Start my day! 🌟',
+                    style: TextStyle(color: AppColors.white)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Future<void> _loadStudentName() async {
-  // Try cache first
-  final cached = await AuthService.getCachedProfile();
-  if (cached != null && mounted) {
-    setState(() {
-      _studentName = cached['name'] ?? 'Student';
-    });
-    return;
-  }
+    // Try cache first
+    final cached = await AuthService.getCachedProfile();
+    if (cached != null && mounted) {
+      setState(() {
+        _studentName = cached['name'] ?? 'Student';
+      });
+      return;
+    }
 
-  // No cache — fetch from Firebase directly
-  final user = AuthService.currentUser;
-  if (user == null) return;
+    // No cache — fetch from Firebase directly
+    final user = AuthService.currentUser;
+    if (user == null) return;
 
-  final mobile = user.phoneNumber ?? '';
-  final data = await AuthService.getStudentProfile(mobile);
-  if (data != null && mounted) {
-    setState(() {
-      _studentName = data['name'] ?? 'Student';
-    });
+    final mobile = user.phoneNumber ?? '';
+    final data = await AuthService.getStudentProfile(mobile);
+    if (data != null && mounted) {
+      setState(() {
+        _studentName = data['name'] ?? 'Student';
+      });
+    }
   }
-}
 
   // Pages for bottom nav (index 0 = home/dashboard)
   void _onNavTap(int index) {
@@ -241,29 +281,28 @@ Future<void> _showDailyQuote() async {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-  backgroundColor: AppColors.background,
-  elevation: 0,
-  automaticallyImplyLeading: false,
-  actions: [
-    IconButton(
-      icon: const Icon(Icons.logout_rounded,
-          color: AppColors.primary),
-      onPressed: () {
-  AuthService.logout().then((_) {
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      // ignore: use_build_context_synchronously
-      context,
-      MaterialPageRoute(
-          builder: (_) => const WelcomeScreen()),
-      (route) => false,
-    );
-  });
-},
-      
-    ),
-  ],
-),
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded,
+                color: AppColors.primary),
+            onPressed: () {
+              AuthService.logout().then((_) {
+                if (!mounted) return;
+                Navigator.pushAndRemoveUntil(
+                  // ignore: use_build_context_synchronously
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const WelcomeScreen()),
+                  (route) => false,
+                );
+              });
+            },
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -279,16 +318,16 @@ Future<void> _showDailyQuote() async {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-  Text(
-    'Hello, $_studentName! 👋',
-                          style: TextStyle(
+                        Text(
+                          'Hello, $_studentName! 👋',
+                          style: const TextStyle(
                             color: AppColors.primaryDark,
                             fontSize: 24,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        SizedBox(height: 4),
-                        Text(
+                        const SizedBox(height: 4),
+                        const Text(
                           'Hope you\'re having a great day!',
                           style: TextStyle(
                             color: AppColors.grey,
@@ -306,7 +345,8 @@ Future<void> _showDailyQuote() async {
                       color: AppColors.primaryLight,
                       shape: BoxShape.circle,
                       border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.3), width: 2),
+                          color: AppColors.primary.withValues(alpha: 0.3),
+                          width: 2),
                     ),
                     child: const Icon(Icons.person_rounded,
                         color: AppColors.primary, size: 26),
@@ -352,11 +392,11 @@ Future<void> _showDailyQuote() async {
                     title: 'Feedback &\nThoughts',
                     color: AppColors.orange,
                     lightColor: const Color(0xFFFFEDD5),
-                   onTap: () => Navigator.push(
-  context,
-  MaterialPageRoute(
-      builder: (_) => const FeedbackThoughtsScreen()),
-),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const FeedbackThoughtsScreen()),
+                    ),
                   ),
                   _FeatureCard(
                     icon: Icons.smart_toy_rounded,
@@ -378,7 +418,7 @@ Future<void> _showDailyQuote() async {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
+                  gradient: const LinearGradient(
                     colors: [
                       AppColors.primary,
                       AppColors.primaryDark,
@@ -522,7 +562,7 @@ class _FeatureCard extends StatelessWidget {
             ),
             Text(
               title,
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppColors.primaryDark,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,

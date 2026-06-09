@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:math';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -229,4 +230,108 @@ class AuthService {
 
   // ─── Current user ──────────────────────────────────────────
   static User? get currentUser => _auth.currentUser;
+
+  // ─── Check if email is registered ───────────────────────────
+  static Future<bool> isEmailRegistered(String email) async {
+    try {
+      final query = await _firestore
+          .collection('students')
+          .where('email', isEqualTo: email)
+          .get();
+      return query.docs.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ─── Generate and send OTP via email ────────────────────────
+  static Future<void> sendEmailOTP(String email) async {
+    try {
+      final otp = (Random().nextInt(900000) + 100000).toString();
+      final expiresAt = DateTime.now().add(const Duration(minutes: 10));
+
+      // Store OTP temporarily
+      await _firestore
+          .collection('email_otps')
+          .doc(email)
+          .set({
+        'otp': otp,
+        'expiresAt': expiresAt.toIso8601String(),
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+
+      // In production, integrate with email service (SendGrid, Firebase, etc.)
+      // OTP is stored in Firestore and should be sent via email service.
+    } catch (e) {
+      throw Exception('Failed to send OTP: $e');
+    }
+  }
+
+  // ─── Verify email OTP ───────────────────────────────────────
+  static Future<bool> verifyEmailOTP({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      final doc = await _firestore
+          .collection('email_otps')
+          .doc(email)
+          .get();
+
+      if (!doc.exists) {
+        return false;
+      }
+
+      final data = doc.data()!;
+      final storedOtp = data['otp'] as String;
+      final expiresAt = DateTime.parse(data['expiresAt'] as String);
+
+      // Check if OTP matches and is not expired
+      if (storedOtp == otp && DateTime.now().isBefore(expiresAt)) {
+        // Delete OTP after successful verification
+        await _firestore
+            .collection('email_otps')
+            .doc(email)
+            .delete();
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ─── Check if profile exists by email ────────────────────────
+  static Future<bool> profileExistsByEmail(String email) async {
+    try {
+      final query = await _firestore
+          .collection('students')
+          .where('email', isEqualTo: email)
+          .get();
+      return query.docs.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ─── Get student profile by email ────────────────────────────
+  static Future<Map<String, dynamic>?> getStudentProfileByEmail(
+      String email) async {
+    try {
+      final query = await _firestore
+          .collection('students')
+          .where('email', isEqualTo: email)
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        final data = query.docs.first.data();
+        await _cacheProfile(data);
+        return data;
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
+  }
 }

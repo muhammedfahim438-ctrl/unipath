@@ -119,23 +119,20 @@ class _QuizScreenState extends State<QuizScreen> {
     }
 
     // Save answer
-    _answers[_currentSection][_currentQuestion] =
-        _selectedScore;
+    _answers[_currentSection][_currentQuestion] = _selectedScore;
 
     if (_currentQuestion < 9) {
       // Next question in same section
       setState(() {
         _currentQuestion++;
-        _selectedScore =
-            _answers[_currentSection][_currentQuestion];
+        _selectedScore = _answers[_currentSection][_currentQuestion];
       });
     } else if (_currentSection < 2) {
       // Move to next section
       setState(() {
         _currentSection++;
         _currentQuestion = 0;
-        _selectedScore =
-            _answers[_currentSection][_currentQuestion];
+        _selectedScore = _answers[_currentSection][_currentQuestion];
       });
     } else {
       // All done!
@@ -147,15 +144,13 @@ class _QuizScreenState extends State<QuizScreen> {
     if (_currentQuestion > 0) {
       setState(() {
         _currentQuestion--;
-        _selectedScore =
-            _answers[_currentSection][_currentQuestion];
+        _selectedScore = _answers[_currentSection][_currentQuestion];
       });
     } else if (_currentSection > 0) {
       setState(() {
         _currentSection--;
         _currentQuestion = 9;
-        _selectedScore =
-            _answers[_currentSection][_currentQuestion];
+        _selectedScore = _answers[_currentSection][_currentQuestion];
       });
     }
   }
@@ -187,30 +182,27 @@ class _QuizScreenState extends State<QuizScreen> {
     }
 
     // Score as percentage of max (30)
-    final totalScore = visualScore +
-        auditoryScore +
-        kinestheticScore;
-    final scorePercent =
-        ((maxScore / 30) * 100).round();
+    final totalScore = visualScore + auditoryScore + kinestheticScore;
+    final scorePercent = ((maxScore / 30) * 100).round();
 
     try {
       final user = AuthService.currentUser;
-      final cached =
-          await AuthService.getCachedProfile();
+      final cached = await AuthService.getCachedProfile();
       final name = cached?['name'] ?? 'Student';
-      final department =
-          cached?['department'] ?? '';
+      final department = cached?['department'] ?? '';
       final year = cached?['year'] ?? '';
-      final mobile = user?.phoneNumber ?? '';
+      final mobile = user?.phoneNumber ?? cached?['mobile'] ?? '';
 
-      await FirebaseFirestore.instance
-          .collection('learning_style_results')
-          .doc(mobile)
-          .set({
+      // FIX #5: Save by BOTH email AND mobile so dashboard can
+      // always find the result regardless of login type.
+      final email = cached?['email'] ?? '';
+
+      final resultData = {
         'name': name,
         'department': department,
         'year': year,
         'mobile': mobile,
+        'email': email,
         'visual_score': visualScore,
         'auditory_score': auditoryScore,
         'kinesthetic_score': kinestheticScore,
@@ -219,7 +211,23 @@ class _QuizScreenState extends State<QuizScreen> {
         'score_percent': scorePercent,
         'date': DateTime.now().toIso8601String(),
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Save under mobile number (for phone-login users)
+      if (mobile.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('learning_style_results')
+            .doc(mobile)
+            .set(resultData);
+      }
+
+      // Also save under email (for email-login users)
+      if (email.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('learning_style_results')
+            .doc(email)
+            .set(resultData);
+      }
     } catch (e) {
       // Continue even if save fails
     }
@@ -241,6 +249,8 @@ class _QuizScreenState extends State<QuizScreen> {
               .map((a) => a ?? 1)
               .reduce((a, b) => a + b),
           dominantStyle: dominantStyle,
+          // Tell dashboard not to show the quiz popup again this session
+          quizJustCompleted: true,
         ),
       ),
     );
@@ -254,8 +264,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentQ =
-        _allQuestions[_currentSection][_currentQuestion];
+    final currentQ = _allQuestions[_currentSection][_currentQuestion];
     final overallQuestion = _answeredSoFar + 1;
 
     return Scaffold(
@@ -290,25 +299,20 @@ class _QuizScreenState extends State<QuizScreen> {
                         horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
                       color: AppColors.primaryLight,
-                      borderRadius:
-                          BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                          color: AppColors.primary,
-                          width: 1.5),
+                          color: AppColors.primary, width: 1.5),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.timer_rounded,
-                            size: 16,
-                            color: AppColors.primary),
+                            size: 16, color: AppColors.primary),
                         const SizedBox(width: 4),
                         Text(_timeDisplay,
                             style: const TextStyle(
-                                color:
-                                    AppColors.primaryDark,
-                                fontWeight:
-                                    FontWeight.w700,
+                                color: AppColors.primaryDark,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 13)),
                       ],
                     ),
@@ -320,11 +324,9 @@ class _QuizScreenState extends State<QuizScreen> {
             // ── Question ──
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 8),
                     Text('Q.$overallQuestion',
@@ -345,8 +347,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     const Text(
                       'How often does this apply to you?',
                       style: TextStyle(
-                          color: AppColors.grey,
-                          fontSize: 13),
+                          color: AppColors.grey, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
 
@@ -354,8 +355,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     _buildScoreOption(
                       score: 1,
                       label: 'Never',
-                      subtitle:
-                          'Never applies to me',
+                      subtitle: 'Never applies to me',
                       icon: Icons.close_rounded,
                       color: AppColors.red,
                     ),
@@ -365,8 +365,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     _buildScoreOption(
                       score: 2,
                       label: 'Sometimes',
-                      subtitle:
-                          'Sometimes applies to me',
+                      subtitle: 'Sometimes applies to me',
                       icon: Icons.remove_rounded,
                       color: AppColors.orange,
                     ),
@@ -392,16 +391,14 @@ class _QuizScreenState extends State<QuizScreen> {
                 color: AppColors.white,
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black
-                          .withValues(alpha: 0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                       offset: const Offset(0, -4))
                 ],
               ),
               child: Row(
                 children: [
-                  Text(
-                      '$overallQuestion of $_totalQuestions',
+                  Text('$overallQuestion of $_totalQuestions',
                       style: const TextStyle(
                           color: AppColors.grey,
                           fontSize: 14,
@@ -409,13 +406,10 @@ class _QuizScreenState extends State<QuizScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: ClipRRect(
-                      borderRadius:
-                          BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(10),
                       child: LinearProgressIndicator(
-                        value: overallQuestion /
-                            _totalQuestions,
-                        backgroundColor:
-                            AppColors.primaryLight,
+                        value: overallQuestion / _totalQuestions,
+                        backgroundColor: AppColors.primaryLight,
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           AppColors.primary,
                         ),
@@ -425,36 +419,27 @@ class _QuizScreenState extends State<QuizScreen> {
                   ),
                   const SizedBox(width: 16),
                   ElevatedButton(
-                    onPressed: _isSaving
-                        ? null
-                        : _nextQuestion,
+                    onPressed: _isSaving ? null : _nextQuestion,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: AppColors.white,
-                      padding:
-                          const EdgeInsets.symmetric(
-                              horizontal: 28,
-                              vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 28, vertical: 14),
                       shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     child: _isSaving
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child:
-                                CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2))
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
                         : Text(
-                            _currentSection == 2 &&
-                                    _currentQuestion == 9
+                            _currentSection == 2 && _currentQuestion == 9
                                 ? 'Submit'
                                 : 'Next',
                             style: const TextStyle(
-                                fontWeight:
-                                    FontWeight.w700,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 15),
                           ),
                   ),
@@ -476,20 +461,17 @@ class _QuizScreenState extends State<QuizScreen> {
   }) {
     final isSelected = _selectedScore == score;
     return GestureDetector(
-      onTap: () =>
-          setState(() => _selectedScore = score),
+      onTap: () => setState(() => _selectedScore = score),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
               ? color.withValues(alpha: 0.1)
               : AppColors.greyLight,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color:
-                isSelected ? color : Colors.transparent,
+            color: isSelected ? color : Colors.transparent,
             width: 2,
           ),
         ),
@@ -505,16 +487,12 @@ class _QuizScreenState extends State<QuizScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon,
-                  color: isSelected
-                      ? Colors.white
-                      : color,
-                  size: 22),
+                  color: isSelected ? Colors.white : color, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label,
                       style: TextStyle(
@@ -525,14 +503,12 @@ class _QuizScreenState extends State<QuizScreen> {
                           fontSize: 15)),
                   Text(subtitle,
                       style: const TextStyle(
-                          color: AppColors.grey,
-                          fontSize: 12)),
+                          color: AppColors.grey, fontSize: 12)),
                 ],
               ),
             ),
             if (isSelected)
-              Icon(Icons.check_circle_rounded,
-                  color: color, size: 22),
+              Icon(Icons.check_circle_rounded, color: color, size: 22),
           ],
         ),
       ),

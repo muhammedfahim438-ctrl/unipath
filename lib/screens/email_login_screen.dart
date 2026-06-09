@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
+import '../theme.dart';
+import '../services/email_otp_service.dart';
 import '../services/auth_service.dart';
-import 'otp_screen.dart';
+import 'email_otp_screen.dart';
 import 'register_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class EmailLoginScreen extends StatefulWidget {
+  const EmailLoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<EmailLoginScreen> createState() =>
+      _EmailLoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _EmailLoginScreenState
+    extends State<EmailLoginScreen> {
   final _emailController = TextEditingController();
   bool _isLoading = false;
 
@@ -35,12 +39,13 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _sendOTP() async {
     final email = _emailController.text.trim();
 
-    // Validate
     if (email.isEmpty) {
-      _showError('Please enter your email');
+      _showError('Please enter your email address');
       return;
     }
-    if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(email)) {
+    if (!RegExp(
+            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+        .hasMatch(email)) {
       _showError('Please enter a valid email address');
       return;
     }
@@ -48,73 +53,77 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     // Check if email is registered
-    final isRegistered = await AuthService.isEmailRegistered(email);
+    final isRegistered =
+        await AuthService.isEmailRegistered(email);
     if (!isRegistered) {
       setState(() => _isLoading = false);
-      _showError('Email not registered! Please register first.');
+      _showError(
+          'Email not registered! Please register first.');
       return;
     }
 
-    // Send OTP via email
     try {
-      await AuthService.sendEmailOTP(email);
+      await EmailOTPService.sendOTP(email);
+      if (!mounted) return;
       setState(() => _isLoading = false);
 
-      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => OTPScreen(
-            email: email,
-            isEmailOTP: true,
-          ),
+          builder: (_) =>
+              EmailOTPScreen(email: email),
         ),
       );
-    } catch (error) {
+    } catch (e) {
       setState(() => _isLoading = false);
-      _showError('Failed to send OTP: $error');
+      _showError('Failed to send OTP: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF5B21B6)),
+          icon: const Icon(Icons.arrow_back,
+              color: AppColors.primary),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28.0),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 28.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment:
+                MainAxisAlignment.center,
             children: [
               // Logo
               Container(
                 width: 90,
                 height: 90,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEDE9FE),
-                  borderRadius: BorderRadius.circular(20),
+                  color: AppColors.primaryLight,
+                  borderRadius:
+                      BorderRadius.circular(20),
                 ),
                 child: const Icon(Icons.school,
-                    size: 50, color: Color(0xFF5B21B6)),
+                    size: 50,
+                    color: AppColors.primary),
               ),
               const SizedBox(height: 20),
               const Text('UniPath',
                   style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF5B21B6))),
+                      color: AppColors.primary)),
               const Text('Care. Support. Grow.',
                   style: TextStyle(
                       fontSize: 14,
-                      color: Color(0xFF6B7280),
+                      color: AppColors.grey,
                       fontStyle: FontStyle.italic)),
               const SizedBox(height: 50),
 
@@ -125,39 +134,35 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF3B0764))),
+                        color: AppColors.primaryDark)),
               ),
               const SizedBox(height: 8),
 
               // Email input
               TextFormField(
                 controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
+                keyboardType:
+                    TextInputType.emailAddress,
                 decoration: InputDecoration(
-                  hintText: 'your.email@example.com',
+                  hintText:
+                      'example@email.com',
                   hintStyle: const TextStyle(
-                      color: Color(0xFFD1D5DB)),
-                  prefixIcon: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Icon(Icons.email_outlined,
-                        color: Color(0xFF5B21B6)),
-                  ),
-                  prefixIconConstraints: const BoxConstraints(
-                      minWidth: 0, minHeight: 0),
+                      color: AppColors.grey),
+                  prefixIcon: const Icon(
+                      Icons.email_outlined,
+                      color: AppColors.primary),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius:
+                        BorderRadius.circular(12),
                     borderSide: const BorderSide(
-                        color: Color(0xFF5B21B6)),
+                        color: AppColors.primary),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius:
+                        BorderRadius.circular(12),
                     borderSide: const BorderSide(
-                        color: Color(0xFF5B21B6), width: 2),
-                  ),
-                  errorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: Colors.red),
+                        color: AppColors.primary,
+                        width: 2),
                   ),
                 ),
               ),
@@ -168,11 +173,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _sendOTP,
+                  onPressed:
+                      _isLoading ? null : _sendOTP,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF5B21B6),
+                    backgroundColor: AppColors.primary,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius:
+                            BorderRadius.circular(12)),
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(
@@ -181,28 +188,33 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(
                               fontSize: 16,
                               color: Colors.white,
-                              fontWeight: FontWeight.w600)),
+                              fontWeight:
+                                  FontWeight.w600)),
                 ),
               ),
               const SizedBox(height: 16),
 
               // Register link
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment:
+                    MainAxisAlignment.center,
                 children: [
                   const Text('New here? ',
-                      style: TextStyle(color: Color(0xFF6B7280))),
+                      style: TextStyle(
+                          color: AppColors.grey)),
                   GestureDetector(
-                    onTap: () => Navigator.pushReplacement(
+                    onTap: () =>
+                        Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
-                          builder: (context) =>
+                          builder: (_) =>
                               const RegisterScreen()),
                     ),
                     child: const Text('Register now',
                         style: TextStyle(
-                            color: Color(0xFF5B21B6),
-                            fontWeight: FontWeight.w600)),
+                            color: AppColors.primary,
+                            fontWeight:
+                                FontWeight.w600)),
                   ),
                 ],
               ),

@@ -9,6 +9,7 @@ class ResultScreen extends StatefulWidget {
   final int auditoryScore;
   final int kinestheticScore;
   final String dominantStyle;
+  final bool quizJustCompleted;
 
   const ResultScreen({
     super.key,
@@ -17,6 +18,7 @@ class ResultScreen extends StatefulWidget {
     required this.auditoryScore,
     required this.kinestheticScore,
     required this.dominantStyle,
+    this.quizJustCompleted = false,
   });
 
   @override
@@ -297,7 +299,7 @@ class _ResultScreenState extends State<ResultScreen>
                     context,
                     MaterialPageRoute(
                         builder: (_) =>
-                            const DashboardScreen()),
+                            DashboardScreen(quizJustCompleted: widget.quizJustCompleted)),
                     (route) => false,
                   );
                 },

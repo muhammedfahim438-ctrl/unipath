@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import 'admin_login_screen.dart';
+import 'email_login_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -117,7 +118,7 @@ class WelcomeScreen extends StatelessWidget {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (context) => const StudentEntryScreen()),
+                        builder: (context) => const EmailLoginScreen()),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF5B21B6),

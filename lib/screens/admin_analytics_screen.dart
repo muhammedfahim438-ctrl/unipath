@@ -10,18 +10,22 @@ class AdminAnalyticsScreen extends StatefulWidget {
       _AdminAnalyticsScreenState();
 }
 
-class _AdminAnalyticsScreenState
-    extends State<AdminAnalyticsScreen> {
+class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
   bool _isLoading = true;
+  String _errorMessage = '';
+
   int _totalStudents = 0;
   int _totalAppointments = 0;
   int _completedSessions = 0;
   int _pendingSessions = 0;
+  int _cancelledSessions = 0;
   int _totalFeedback = 0;
   int _totalThoughts = 0;
   double _avgRating = 0.0;
   Map<String, int> _departmentWise = {};
   Map<String, int> _appointmentsByStatus = {};
+
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -30,58 +34,60 @@ class _AdminAnalyticsScreenState
   }
 
   Future<void> _loadAnalytics() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
+
     try {
-      // ── Students ──
-      final studentsSnap = await FirebaseFirestore.instance
-          .collection('students')
-          .get();
+      // Run all queries in parallel for speed
+      final results = await Future.wait([
+        _db.collection('students').get(),
+        _db.collection('appointments').get(),
+        _db.collection('feedback').get(),
+        _db.collection('thoughts').get(),
+      ]);
 
-      // ── Appointments ──
-      final appointmentsSnap = await FirebaseFirestore
-          .instance
-          .collection('appointments')
-          .get();
+      final studentsSnap     = results[0];
+      final appointmentsSnap = results[1];
+      final feedbackSnap     = results[2];
+      final thoughtsSnap     = results[3];
 
-      // ── Feedback ──
-      final feedbackSnap = await FirebaseFirestore.instance
-          .collection('feedback')
-          .get();
-
-      // ── Thoughts ──
-      final thoughtsSnap = await FirebaseFirestore.instance
-          .collection('thoughts')
-          .get();
-
-      // Calculate stats
-      final completed = appointmentsSnap.docs
-          .where((d) => d['status'] == 'completed')
-          .length;
-      final pending = appointmentsSnap.docs
-          .where((d) => d['status'] == 'pending')
-          .length;
-      final cancelled = appointmentsSnap.docs
-          .where((d) => d['status'] == 'cancelled')
-          .length;
-
-      // Average rating
-      double totalRating = 0;
-      for (final doc in feedbackSnap.docs) {
-        totalRating +=
-            (doc['rating'] as num?)?.toDouble() ?? 0;
+      // ── Appointment status counts ──
+      // Handles both 'completed' and 'Completed' etc.
+      int completed = 0, pending = 0, cancelled = 0;
+      for (final doc in appointmentsSnap.docs) {
+        final status = (doc.data()['status'] ?? '').toString().toLowerCase().trim();
+        if (status == 'completed') {
+          completed++;
+        } else if (status == 'pending') {
+          pending++;
+        } else if (status == 'cancelled') {
+          cancelled++;
+        }
       }
-      final avgRating = feedbackSnap.docs.isEmpty
-          ? 0.0
-          : totalRating / feedbackSnap.docs.length;
 
-      // Department wise students
+      // ── Average rating ──
+      double totalRating = 0;
+      int ratingCount = 0;
+      for (final doc in feedbackSnap.docs) {
+        final data = doc.data();
+        if (data.containsKey('rating') && data['rating'] != null) {
+          totalRating += (data['rating'] as num).toDouble();
+          ratingCount++;
+        }
+      }
+      final avgRating = ratingCount == 0 ? 0.0 : totalRating / ratingCount;
+
+      // ── Department breakdown ──
       final deptMap = <String, int>{};
       for (final doc in studentsSnap.docs) {
-        final dept =
-            doc['department']?.toString() ?? 'Unknown';
+        final data = doc.data();
+        final dept = (data['department'] ?? data['dept'] ?? 'Unknown').toString();
         deptMap[dept] = (deptMap[dept] ?? 0) + 1;
       }
-
-      // Sort by count
       final sortedDepts = Map.fromEntries(
         deptMap.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value)),
@@ -89,27 +95,36 @@ class _AdminAnalyticsScreenState
 
       if (mounted) {
         setState(() {
-          _totalStudents = studentsSnap.docs.length;
-          _totalAppointments = appointmentsSnap.docs.length;
-          _completedSessions = completed;
-          _pendingSessions = pending;
-          _totalFeedback = feedbackSnap.docs.length;
-          _totalThoughts = thoughtsSnap.docs.length;
-          _avgRating = avgRating;
-          _departmentWise = sortedDepts;
+          _totalStudents       = studentsSnap.docs.length;
+          _totalAppointments   = appointmentsSnap.docs.length;
+          _completedSessions   = completed;
+          _pendingSessions     = pending;
+          _cancelledSessions   = cancelled;
+          _totalFeedback       = feedbackSnap.docs.length;
+          _totalThoughts       = thoughtsSnap.docs.length;
+          _avgRating           = avgRating;
+          _departmentWise      = sortedDepts;
           _appointmentsByStatus = {
             'Completed': completed,
-            'Pending': pending,
+            'Pending':   pending,
             'Cancelled': cancelled,
           };
-          _isLoading = false;
+          _isLoading    = false;
+          _errorMessage = '';
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint('AdminAnalytics ERROR: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading    = false;
+          _errorMessage = e.toString();
+        });
+      }
     }
   }
 
+  // ── Build ────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -122,10 +137,11 @@ class _AdminAnalyticsScreenState
               color: AppColors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Analytics Dashboard',
-            style: TextStyle(
-                color: AppColors.white,
-                fontWeight: FontWeight.w700)),
+        title: const Text(
+          'Analytics Dashboard',
+          style: TextStyle(
+              color: AppColors.white, fontWeight: FontWeight.w700),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded,
@@ -136,190 +152,306 @@ class _AdminAnalyticsScreenState
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(
-                  color: AppColors.primary))
-          : RefreshIndicator(
-              onRefresh: _loadAnalytics,
-              color: AppColors.primary,
-              child: SingleChildScrollView(
-                physics:
-                    const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    // ── Stats Grid ──
-                    GridView.count(
-                      crossAxisCount: 2,
-                      shrinkWrap: true,
-                      physics:
-                          const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 1.4,
-                      children: [
-                        _StatCard(
-                          title: 'Total Students',
-                          value: '$_totalStudents',
-                          icon: Icons.people_rounded,
-                          color: AppColors.primary,
-                          lightColor: AppColors.primaryLight,
-                        ),
-                        _StatCard(
-                          title: 'Total Appointments',
-                          value: '$_totalAppointments',
-                          icon: Icons.calendar_month_rounded,
-                          color: AppColors.blue,
-                          lightColor:
-                              const Color(0xFFDBEAFE),
-                        ),
-                        _StatCard(
-                          title: 'Completed Sessions',
-                          value: '$_completedSessions',
-                          icon: Icons.check_circle_rounded,
-                          color: AppColors.green,
-                          lightColor:
-                              const Color(0xFFDCFCE7),
-                        ),
-                        _StatCard(
-                          title: 'Pending Sessions',
-                          value: '$_pendingSessions',
-                          icon: Icons.pending_rounded,
-                          color: AppColors.orange,
-                          lightColor:
-                              const Color(0xFFFFEDD5),
-                        ),
-                        _StatCard(
-                          title: 'Total Feedback',
-                          value: '$_totalFeedback',
-                          icon: Icons.feedback_rounded,
-                          color: AppColors.primary,
-                          lightColor: AppColors.primaryLight,
-                        ),
-                        _StatCard(
-                          title: 'Avg Rating',
-                          value:
-                              '${_avgRating.toStringAsFixed(1)} ⭐',
-                          icon: Icons.star_rounded,
-                          color: const Color(0xFFF59E0B),
-                          lightColor:
-                              const Color(0xFFFEF3C7),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ── Appointment Status ──
-                    _buildSectionTitle('Appointment Status'),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius:
-                            BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        children: _appointmentsByStatus
-                            .entries
-                            .map((e) => _buildProgressRow(
-                                  e.key,
-                                  e.value,
-                                  _totalAppointments,
-                                  _statusColor(e.key),
-                                ))
-                            .toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ── Department wise ──
-                    _buildSectionTitle(
-                        'Students by Department'),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius:
-                            BorderRadius.circular(16),
-                      ),
-                      child: _departmentWise.isEmpty
-                          ? const Center(
-                              child: Text(
-                                  'No data available',
-                                  style: TextStyle(
-                                      color: AppColors.grey)))
-                          : Column(
-                              children: _departmentWise
-                                  .entries
-                                  .take(10)
-                                  .map((e) =>
-                                      _buildDeptRow(
-                                          e.key,
-                                          e.value,
-                                          _totalStudents))
-                                  .toList(),
-                            ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ── Engagement ──
-                    _buildSectionTitle(
-                        'Student Engagement'),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _EngagementCard(
-                            title: 'Thoughts Shared',
-                            value: '$_totalThoughts',
-                            icon: Icons
-                                .chat_bubble_rounded,
-                            color: AppColors.green,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _EngagementCard(
-                            title: 'Feedback Given',
-                            value: '$_totalFeedback',
-                            icon: Icons.feedback_rounded,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 30),
-                  ],
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: AppColors.primary),
+                  SizedBox(height: 12),
+                  Text('Loading analytics...',
+                      style: TextStyle(color: AppColors.grey)),
+                ],
               ),
-            ),
+            )
+          : _errorMessage.isNotEmpty
+              ? _buildErrorView()
+              : RefreshIndicator(
+                  onRefresh: _loadAnalytics,
+                  color: AppColors.primary,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── Stats Grid ──
+                        GridView.count(
+                          crossAxisCount: 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 1.4,
+                          children: [
+                            _StatCard(
+                              title: 'Total Students',
+                              value: '$_totalStudents',
+                              icon: Icons.people_rounded,
+                              color: AppColors.primary,
+                              lightColor: AppColors.primaryLight,
+                            ),
+                            _StatCard(
+                              title: 'Total Appointments',
+                              value: '$_totalAppointments',
+                              icon: Icons.calendar_month_rounded,
+                              color: AppColors.blue,
+                              lightColor: const Color(0xFFDBEAFE),
+                            ),
+                            _StatCard(
+                              title: 'Completed Sessions',
+                              value: '$_completedSessions',
+                              icon: Icons.check_circle_rounded,
+                              color: AppColors.green,
+                              lightColor: const Color(0xFFDCFCE7),
+                            ),
+                            _StatCard(
+                              title: 'Pending Sessions',
+                              value: '$_pendingSessions',
+                              icon: Icons.pending_rounded,
+                              color: AppColors.orange,
+                              lightColor: const Color(0xFFFFEDD5),
+                            ),
+                            _StatCard(
+                              title: 'Total Feedback',
+                              value: '$_totalFeedback',
+                              icon: Icons.feedback_rounded,
+                              color: AppColors.primary,
+                              lightColor: AppColors.primaryLight,
+                            ),
+                            _StatCard(
+                              title: 'Avg Rating',
+                              value: _avgRating.toStringAsFixed(1),
+                              icon: Icons.star_rounded,
+                              color: const Color(0xFFF59E0B),
+                              lightColor: const Color(0xFFFEF3C7),
+                              showStar: true,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ── Appointment Status ──
+                        _buildSectionTitle('Appointment Status'),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              )
+                            ],
+                          ),
+                          child: _totalAppointments == 0
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(8.0),
+                                    child: Text('No appointments yet',
+                                        style:
+                                            TextStyle(color: AppColors.grey)),
+                                  ),
+                                )
+                              : Column(
+                                  children: _appointmentsByStatus.entries
+                                      .map((e) => _buildProgressRow(
+                                            e.key,
+                                            e.value,
+                                            _totalAppointments,
+                                            _statusColor(e.key),
+                                          ))
+                                      .toList(),
+                                ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ── Students by Department ──
+                        _buildSectionTitle('Students by Department'),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              )
+                            ],
+                          ),
+                          child: _departmentWise.isEmpty
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(8.0),
+                                    child: Text('No data available',
+                                        style:
+                                            TextStyle(color: AppColors.grey)),
+                                  ),
+                                )
+                              : Column(
+                                  children: _departmentWise.entries
+                                      .take(10)
+                                      .map((e) => _buildDeptRow(
+                                            e.key,
+                                            e.value,
+                                            _totalStudents,
+                                          ))
+                                      .toList(),
+                                ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ── Cancelled Sessions ──
+                        _buildSectionTitle('Cancelled Sessions'),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              )
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFE4E4),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.cancel_rounded,
+                                    color: AppColors.red, size: 24),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$_cancelledSessions',
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.red,
+                                    ),
+                                  ),
+                                  const Text('Total Cancelled',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.grey)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ── Student Engagement ──
+                        _buildSectionTitle('Student Engagement'),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _EngagementCard(
+                                title: 'Thoughts Shared',
+                                value: '$_totalThoughts',
+                                icon: Icons.chat_bubble_rounded,
+                                color: AppColors.green,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _EngagementCard(
+                                title: 'Feedback Given',
+                                value: '$_totalFeedback',
+                                icon: Icons.feedback_rounded,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 30),
+                      ],
+                    ),
+                  ),
+                ),
     );
   }
 
+  // ── Error View ───────────────────────────────────────────────
+  Widget _buildErrorView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline_rounded,
+                size: 48, color: AppColors.red),
+            const SizedBox(height: 12),
+            const Text(
+              'Failed to load analytics',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryDark),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage,
+              style: const TextStyle(fontSize: 12, color: AppColors.grey),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _loadAnalytics,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────
   Color _statusColor(String status) {
     switch (status) {
       case 'Completed': return AppColors.green;
-      case 'Pending': return AppColors.orange;
+      case 'Pending':   return AppColors.orange;
       case 'Cancelled': return AppColors.red;
-      default: return AppColors.grey;
+      default:          return AppColors.grey;
     }
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(title,
-        style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.primaryDark));
+    return Text(
+      title,
+      style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          color: AppColors.primaryDark),
+    );
   }
 
   Widget _buildProgressRow(
       String label, int value, int total, Color color) {
-    final percent =
-        total == 0 ? 0.0 : value / total;
+    final percent = total == 0 ? 0.0 : value / total;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
@@ -329,9 +461,8 @@ class _AdminAnalyticsScreenState
               Container(
                 width: 10,
                 height: 10,
-                decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle),
+                decoration:
+                    BoxDecoration(color: color, shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -353,10 +484,8 @@ class _AdminAnalyticsScreenState
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: percent,
-              backgroundColor:
-                  color.withValues(alpha: 0.1),
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(color),
+              backgroundColor: color.withValues(alpha: 0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
               minHeight: 6,
             ),
           ),
@@ -365,10 +494,8 @@ class _AdminAnalyticsScreenState
     );
   }
 
-  Widget _buildDeptRow(
-      String dept, int count, int total) {
-    final percent =
-        total == 0 ? 0.0 : count / total;
+  Widget _buildDeptRow(String dept, int count, int total) {
+    final percent = total == 0 ? 0.0 : count / total;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -397,11 +524,9 @@ class _AdminAnalyticsScreenState
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: percent,
-              backgroundColor:
-                  AppColors.primaryLight,
+              backgroundColor: AppColors.primaryLight,
               valueColor:
-                  const AlwaysStoppedAnimation<Color>(
-                      AppColors.primary),
+                  const AlwaysStoppedAnimation<Color>(AppColors.primary),
               minHeight: 5,
             ),
           ),
@@ -411,13 +536,14 @@ class _AdminAnalyticsScreenState
   }
 }
 
-// ── Stat Card ─────────────────────────────────────────────────
+// ── Stat Card ──────────────────────────────────────────────────
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
   final Color color;
   final Color lightColor;
+  final bool showStar;
 
   const _StatCard({
     required this.title,
@@ -425,6 +551,7 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.lightColor,
+    this.showStar = false,
   });
 
   @override
@@ -443,8 +570,7 @@ class _StatCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:
-            MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
             width: 36,
@@ -456,18 +582,29 @@ class _StatCard extends StatelessWidget {
             child: Icon(icon, color: color, size: 20),
           ),
           Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value,
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: color)),
+              showStar
+                  ? Row(
+                      children: [
+                        Text(value,
+                            style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: color)),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.star_rounded,
+                            color: Color(0xFFF59E0B), size: 18),
+                      ],
+                    )
+                  : Text(value,
+                      style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: color)),
               Text(title,
                   style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.grey)),
+                      fontSize: 11, color: AppColors.grey)),
             ],
           ),
         ],
@@ -476,7 +613,7 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ── Engagement Card ───────────────────────────────────────────
+// ── Engagement Card ────────────────────────────────────────────
 class _EngagementCard extends StatelessWidget {
   final String title;
   final String value;
@@ -515,9 +652,8 @@ class _EngagementCard extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   color: color)),
           Text(title,
-              style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.grey)),
+              style:
+                  const TextStyle(fontSize: 12, color: AppColors.grey)),
         ],
       ),
     );
