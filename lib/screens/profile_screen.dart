@@ -75,7 +75,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _clearOldCacheAndLoad();
+    _loadProfile();
   }
 
   @override
@@ -88,60 +88,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  // ─── Force clear old cache and load fresh ─────────────────
-  Future<void> _clearOldCacheAndLoad() async {
-    await AuthService.clearCache();
-    await _loadProfile();
-  }
-
-  // ─── Fill all fields from data ─────────────────────────────
+  // ─── Fill all fields from Firestore data ──────────────────
   void _fillFields(Map<String, dynamic> data) {
-    _nameController.text = data['name'] ?? '';
-    _emailController.text = data['email'] ?? '';
-    _dobController.text = data['dob'] ?? '';
-    _parentContactController.text =
-        data['parentContact'] ?? '';
-    _yearOfPassingController.text =
-        data['yearOfPassing'] ?? '';
+    _nameController.text          = data['name']          ?? '';
+    _emailController.text         = data['email']         ?? '';
+    _dobController.text           = data['dob']           ?? '';
+    _parentContactController.text = data['parentContact'] ?? '';
+    _yearOfPassingController.text = data['yearOfPassing'] ?? '';
 
     _selectedGender = _genders.contains(data['gender'])
-        ? data['gender']
-        : _genders[0];
-
-    _selectedDepartment =
-        _departments.contains(data['department'])
-            ? data['department']
-            : _departments[0];
-
+        ? data['gender'] : _genders[0];
+    _selectedDepartment = _departments.contains(data['department'])
+        ? data['department'] : _departments[0];
     _selectedYear = _years.contains(data['year'])
-        ? data['year']
-        : _years[0];
-
-    _selected12thMajor =
-        _majors.contains(data['major12th'])
-            ? data['major12th']
-            : _majors[0];
+        ? data['year'] : _years[0];
+    _selected12thMajor = _majors.contains(data['major12th'])
+        ? data['major12th'] : _majors[0];
   }
 
-  // ─── Load profile from Firebase ───────────────────────────
+  // ─── FIXED: Load profile using saved mobile from prefs ────
   Future<void> _loadProfile() async {
     try {
-      final user = AuthService.currentUser;
-      if (user == null) {
+      // 1. Try Firebase Auth phone number first
+      String? mobile = AuthService.currentUser?.phoneNumber;
+
+      // 2. Fall back to mobile saved in SharedPreferences at login
+      if (mobile == null || mobile.isEmpty) {
+        mobile = await AuthService.getLoggedInMobile();
+      }
+
+      // 3. Fall back to cached profile's mobile field
+      if (mobile == null || mobile.isEmpty) {
+        final cached = await AuthService.getCachedProfile();
+        mobile = cached?['mobile'] as String?;
+      }
+
+      if (mobile == null || mobile.isEmpty) {
         if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      final mobile = user.phoneNumber ?? '';
-      if (mounted) setState(() => _mobileNumber = mobile);
+      if (mounted) setState(() => _mobileNumber = mobile!);
 
-      final data =
-          await AuthService.getStudentProfile(mobile);
+      // Try Firestore (skip cache since we want fresh data)
+      final data = await AuthService.getStudentProfile(mobile);
       if (data != null && mounted) {
-        _fillFields(data);
+        setState(() => _fillFields(data));
       }
-      if (mounted) setState(() => _isLoading = false);
     } catch (e) {
+      debugPrint('ProfileScreen _loadProfile error: $e');
+    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -152,35 +148,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final user = AuthService.currentUser;
-      final mobile = user?.phoneNumber ?? _mobileNumber;
-
       await AuthService.updateStudentProfile(
-        mobile: mobile,
+        mobile: _mobileNumber,
         data: {
-          'name': _nameController.text.trim(),
-          'email': _emailController.text.trim(),
-          'gender': _selectedGender,
-          'dob': _dobController.text.trim(),
-          'department': _selectedDepartment,
-          'year': _selectedYear,
-          'major12th': _selected12thMajor,
-          'yearOfPassing':
-              _yearOfPassingController.text.trim(),
-          'parentContact':
-              _parentContactController.text.trim(),
+          'name':          _nameController.text.trim(),
+          'email':         _emailController.text.trim(),
+          'gender':        _selectedGender,
+          'dob':           _dobController.text.trim(),
+          'department':    _selectedDepartment,
+          'year':          _selectedYear,
+          'major12th':     _selected12thMajor,
+          'yearOfPassing': _yearOfPassingController.text.trim(),
+          'parentContact': _parentContactController.text.trim(),
         },
       );
 
       if (!mounted) return;
       setState(() {
-        _isSaving = false;
+        _isSaving  = false;
         _isEditing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              const Text('Profile updated successfully!'),
+          content: const Text('Profile updated successfully!'),
           backgroundColor: const Color(0xFF5B21B6),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -228,16 +218,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFFF3F4F6),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: const Color(0xFFE5E7EB)),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
           ),
           child: Row(
             children: [
               Expanded(
-                child: Text(value,
-                    style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF6B7280))),
+                child: Text(
+                  value.isEmpty ? 'Loading...' : value,
+                  style: const TextStyle(
+                      fontSize: 14, color: Color(0xFF6B7280)),
+                ),
               ),
               const Icon(Icons.lock_outline,
                   size: 16, color: Color(0xFF9CA3AF)),
@@ -274,63 +264,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
               return '$label is required';
             }
             if (fieldType == 'email') {
-              if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
                   .hasMatch(v)) {
                 return 'Enter a valid email address';
               }
             }
             if (fieldType == 'phone') {
-              if (v.length != 10 ||
-                  !RegExp(r'^[0-9]+$').hasMatch(v)) {
+              if (v.length != 10 || !RegExp(r'^[0-9]+$').hasMatch(v)) {
                 return 'Enter valid 10-digit number';
               }
             }
             if (fieldType == 'dob') {
-              if (!RegExp(r'^\d{2}/\d{2}/\d{4}$')
-                  .hasMatch(v)) {
+              if (!RegExp(r'^\d{2}/\d{2}/\d{4}$').hasMatch(v)) {
                 return 'Enter date as DD/MM/YYYY';
               }
             }
             if (fieldType == 'year') {
-              if (v.length != 4 ||
-                  !RegExp(r'^[0-9]+$').hasMatch(v)) {
+              if (v.length != 4 || !RegExp(r'^[0-9]+$').hasMatch(v)) {
                 return 'Enter valid 4-digit year';
               }
             }
             return null;
           },
           decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 12),
-            fillColor: _isEditing
-                ? Colors.white
-                : const Color(0xFFF9FAFB),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            fillColor:
+                _isEditing ? Colors.white : const Color(0xFFF9FAFB),
             filled: true,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                  color: Color(0xFFD1D5DB)),
+              borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
             ),
             disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                  color: Color(0xFFE5E7EB)),
+              borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                  color: Color(0xFF5B21B6), width: 2),
+              borderSide:
+                  const BorderSide(color: Color(0xFF5B21B6), width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide:
-                  const BorderSide(color: Colors.red),
+              borderSide: const BorderSide(color: Colors.red),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                  color: Colors.red, width: 2),
+              borderSide:
+                  const BorderSide(color: Colors.red, width: 2),
             ),
           ),
         ),
@@ -362,26 +344,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             isExpanded: true,
             items: items
                 .map((e) => DropdownMenuItem(
-                    value: e, child: Text(e,
-                    overflow: TextOverflow.ellipsis)))
+                    value: e,
+                    child: Text(e, overflow: TextOverflow.ellipsis)))
                 .toList(),
             onChanged: onChanged,
             decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 12),
-              fillColor: _isEditing
-                  ? Colors.white
-                  : const Color(0xFFF9FAFB),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              fillColor:
+                  _isEditing ? Colors.white : const Color(0xFFF9FAFB),
               filled: true,
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                    color: Color(0xFFD1D5DB)),
+                borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(
-                    color: Color(0xFF5B21B6), width: 2),
+                borderSide:
+                    const BorderSide(color: Color(0xFF5B21B6), width: 2),
               ),
             ),
           ),
@@ -399,8 +379,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: const Color(0xFF5B21B6),
         title: const Text('My Profile',
             style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600)),
+                color: Colors.white, fontWeight: FontWeight.w600)),
         centerTitle: true,
         automaticallyImplyLeading: false,
         actions: [
@@ -424,15 +403,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(
-                  color: Color(0xFF5B21B6)))
+              child:
+                  CircularProgressIndicator(color: Color(0xFF5B21B6)))
           : Form(
               key: _formKey,
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    // ── Avatar ──
+                    // ── Avatar ──────────────────────────────
                     Stack(
                       children: [
                         Container(
@@ -440,12 +419,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           height: 90,
                           decoration: BoxDecoration(
                             color: const Color(0xFFEDE9FE),
-                            borderRadius:
-                                BorderRadius.circular(45),
+                            borderRadius: BorderRadius.circular(45),
                           ),
                           child: const Icon(Icons.person,
-                              size: 50,
-                              color: Color(0xFF5B21B6)),
+                              size: 50, color: Color(0xFF5B21B6)),
                         ),
                         if (_isEditing)
                           Positioned(
@@ -455,16 +432,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               width: 28,
                               height: 28,
                               decoration: BoxDecoration(
-                                color: const Color(
-                                    0xFF5B21B6),
-                                borderRadius:
-                                    BorderRadius.circular(
-                                        14),
+                                color: const Color(0xFF5B21B6),
+                                borderRadius: BorderRadius.circular(14),
                               ),
-                              child: const Icon(
-                                  Icons.edit,
-                                  size: 16,
-                                  color: Colors.white),
+                              child: const Icon(Icons.edit,
+                                  size: 16, color: Colors.white),
                             ),
                           ),
                       ],
@@ -482,63 +454,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Text(
                       _selectedDepartment,
                       style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF6B7280)),
+                          fontSize: 13, color: Color(0xFF6B7280)),
                     ),
                     const SizedBox(height: 24),
 
-                    // ── Mobile READ ONLY ──
-                    _buildReadOnlyField(
-                        'Mobile Number', _mobileNumber),
-
-                    // ── All fields ──
-                    _buildTextField(
-                        'Full Name', _nameController),
-                    _buildTextField(
-                        'Email Address', _emailController,
+                    // ── Fields ──────────────────────────────
+                    _buildReadOnlyField('Mobile Number', _mobileNumber),
+                    _buildTextField('Full Name', _nameController),
+                    _buildTextField('Email Address', _emailController,
                         type: TextInputType.emailAddress,
                         fieldType: 'email'),
-                    _buildDropdown(
-                        'Gender',
-                        _selectedGender,
-                        _genders,
-                        (v) => setState(
-                            () => _selectedGender = v!)),
-                    _buildTextField(
-                        'Date of Birth', _dobController,
+                    _buildDropdown('Gender', _selectedGender, _genders,
+                        (v) => setState(() => _selectedGender = v!)),
+                    _buildTextField('Date of Birth', _dobController,
                         fieldType: 'dob'),
                     _buildDropdown(
                         'Department',
                         _selectedDepartment,
                         _departments,
-                        (v) => setState(
-                            () => _selectedDepartment = v!)),
-                    _buildDropdown(
-                        'Year',
-                        _selectedYear,
-                        _years,
-                        (v) => setState(
-                            () => _selectedYear = v!)),
+                        (v) => setState(() => _selectedDepartment = v!)),
+                    _buildDropdown('Year', _selectedYear, _years,
+                        (v) => setState(() => _selectedYear = v!)),
                     _buildDropdown(
                         '12th Standard Major',
                         _selected12thMajor,
                         _majors,
-                        (v) => setState(
-                            () => _selected12thMajor = v!)),
+                        (v) => setState(() => _selected12thMajor = v!)),
                     _buildTextField(
-                        'Year of Passing',
-                        _yearOfPassingController,
-                        type: TextInputType.number,
-                        fieldType: 'year'),
+                        'Year of Passing', _yearOfPassingController,
+                        type: TextInputType.number, fieldType: 'year'),
                     _buildTextField(
-                        'Parent Contact Number',
-                        _parentContactController,
-                        type: TextInputType.phone,
-                        fieldType: 'phone'),
+                        'Parent Contact Number', _parentContactController,
+                        type: TextInputType.phone, fieldType: 'phone'),
 
                     const SizedBox(height: 20),
 
-                    // ── Go to Dashboard ──
+                    // ── Go to Dashboard ──────────────────────
                     if (!_isEditing)
                       SizedBox(
                         width: double.infinity,
@@ -546,82 +497,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: ElevatedButton(
                           onPressed: _goToDashboard,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                const Color(0xFF5B21B6),
+                            backgroundColor: const Color(0xFF5B21B6),
                             shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(
-                                        12)),
+                                borderRadius: BorderRadius.circular(12)),
                           ),
-                          child: const Text(
-                              'Go to Dashboard',
+                          child: const Text('Go to Dashboard',
                               style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.white,
-                                  fontWeight:
-                                      FontWeight.w600)),
+                                  fontWeight: FontWeight.w600)),
                         ),
                       ),
 
-                    // ── Save/Cancel ──
+                    // ── Save / Cancel ────────────────────────
                     if (_isEditing)
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () => setState(
-                                  () => _isEditing = false),
-                              style:
-                                  OutlinedButton.styleFrom(
+                              onPressed: () =>
+                                  setState(() => _isEditing = false),
+                              style: OutlinedButton.styleFrom(
                                 side: const BorderSide(
-                                    color:
-                                        Color(0xFF5B21B6)),
-                                shape:
-                                    RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius
-                                                .circular(
-                                                    12)),
-                                padding: const EdgeInsets
-                                    .symmetric(vertical: 14),
+                                    color: Color(0xFF5B21B6)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 14),
                               ),
                               child: const Text('Cancel',
                                   style: TextStyle(
-                                      color: Color(
-                                          0xFF5B21B6),
-                                      fontWeight:
-                                          FontWeight.w600)),
+                                      color: Color(0xFF5B21B6),
+                                      fontWeight: FontWeight.w600)),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton(
-                              onPressed: _isSaving
-                                  ? null
-                                  : _saveProfile,
-                              style:
-                                  ElevatedButton.styleFrom(
+                              onPressed:
+                                  _isSaving ? null : _saveProfile,
+                              style: ElevatedButton.styleFrom(
                                 backgroundColor:
                                     const Color(0xFF5B21B6),
-                                shape:
-                                    RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius
-                                                .circular(
-                                                    12)),
-                                padding: const EdgeInsets
-                                    .symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 14),
                               ),
                               child: _isSaving
                                   ? const CircularProgressIndicator(
                                       color: Colors.white)
                                   : const Text('Save',
                                       style: TextStyle(
-                                          color:
-                                              Colors.white,
-                                          fontWeight:
-                                              FontWeight
-                                                  .w600)),
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600)),
                             ),
                           ),
                         ],

@@ -334,4 +334,15 @@ class AuthService {
     }
     return null;
   }
+  // ─── Save logged-in mobile to prefs ───────────────────────
+static Future<void> saveLoggedInMobile(String mobile) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('loggedInMobile', mobile);
+}
+
+// ─── Get logged-in mobile from prefs ──────────────────────
+static Future<String?> getLoggedInMobile() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString('loggedInMobile');
+}
 }
