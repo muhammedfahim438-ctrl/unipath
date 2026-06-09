@@ -4,9 +4,9 @@ import '../theme.dart';
 import 'welcome_screen.dart';
 import '../services/auth_service.dart';
 import 'admin_appointments_screen.dart';
+import 'admin_examination_screen.dart';
 import 'admin_feedback_screen.dart';
 import 'admin_analytics_screen.dart';
-import 'admin_examination_screen.dart';
 import 'admin_csv_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -17,13 +17,16 @@ class AdminDashboardScreen extends StatefulWidget {
       _AdminDashboardScreenState();
 }
 
-class _AdminDashboardScreenState
-    extends State<AdminDashboardScreen> {
-  int _selectedIndex = 0;
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  // ✅ All stats that match the Analytics screen
   int _totalStudents = 0;
   int _totalAppointments = 0;
   int _completedSessions = 0;
   int _pendingSessions = 0;
+  int _cancelledSessions = 0;
+  int _totalFeedback = 0;
+  double _avgRating = 0.0;
+
   bool _isLoading = true;
 
   @override
@@ -33,31 +36,56 @@ class _AdminDashboardScreenState
   }
 
   Future<void> _loadStats() async {
+    if (mounted) setState(() => _isLoading = true);
+
     try {
-      // Get total students
-      final studentsSnap = await FirebaseFirestore.instance
-          .collection('students')
-          .get();
+      // ✅ Run all queries in parallel — same as Analytics screen
+      final results = await Future.wait([
+        FirebaseFirestore.instance.collection('students').get(),
+        FirebaseFirestore.instance.collection('appointments').get(),
+        FirebaseFirestore.instance.collection('feedback').get(),
+      ]);
 
-      // Get appointments
-      final appointmentsSnap = await FirebaseFirestore.instance
-          .collection('appointments')
-          .get();
+      final studentsSnap     = results[0];
+      final appointmentsSnap = results[1];
+      final feedbackSnap     = results[2];
 
-      final completed = appointmentsSnap.docs
-          .where((d) => d['status'] == 'completed')
-          .length;
-      final pending = appointmentsSnap.docs
-          .where((d) => d['status'] == 'pending')
-          .length;
+      // ✅ Count appointment statuses (case-insensitive, same as Analytics)
+      int completed = 0, pending = 0, cancelled = 0;
+      for (final doc in appointmentsSnap.docs) {
+        final status =
+            (doc.data()['status'] ?? '').toString().toLowerCase().trim();
+        if (status == 'completed') {
+          completed++;
+        } else if (status == 'pending') {
+          pending++;
+        } else if (status == 'cancelled') {
+          cancelled++;
+        }
+      }
+
+      // ✅ Average rating — same logic as Analytics screen
+      double totalRating = 0;
+      int ratingCount = 0;
+      for (final doc in feedbackSnap.docs) {
+        final data = doc.data();
+        if (data.containsKey('rating') && data['rating'] != null) {
+          totalRating += (data['rating'] as num).toDouble();
+          ratingCount++;
+        }
+      }
+      final avgRating = ratingCount == 0 ? 0.0 : totalRating / ratingCount;
 
       if (mounted) {
         setState(() {
-          _totalStudents = studentsSnap.docs.length;
-          _totalAppointments = appointmentsSnap.docs.length;
-          _completedSessions = completed;
-          _pendingSessions = pending;
-          _isLoading = false;
+          _totalStudents      = studentsSnap.docs.length;
+          _totalAppointments  = appointmentsSnap.docs.length;
+          _completedSessions  = completed;
+          _pendingSessions    = pending;
+          _cancelledSessions  = cancelled;
+          _totalFeedback      = feedbackSnap.docs.length;
+          _avgRating          = avgRating;
+          _isLoading          = false;
         });
       }
     } catch (e) {
@@ -70,51 +98,19 @@ class _AdminDashboardScreenState
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-          builder: (_) => const WelcomeScreen()),
+      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
       (route) => false,
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-  onPressed: () => Navigator.push(
-    context,
-    MaterialPageRoute(
-        builder: (_) => const AdminCsvScreen()),
-  ),
-  backgroundColor: AppColors.primary,
-  icon: const Icon(Icons.download_rounded,
-      color: AppColors.white),
-  label: const Text('CSV Report',
-      style: TextStyle(
-          color: AppColors.white,
-          fontWeight: FontWeight.w600)),
-),
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.primary,
-        automaticallyImplyLeading: false,
-        title: const Text('Admin Dashboard',
-            style: TextStyle(
-                color: AppColors.white,
-                fontWeight: FontWeight.w700)),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined,
-                color: AppColors.white),
-            onPressed: () {},
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                  color: AppColors.primary))
-          : SingleChildScrollView(
+  // ── Screens for each nav tab ──
+  Widget _buildBody() {
+    // Home dashboard content
+    if (_isLoading) {
+      return const Center(
+          child: CircularProgressIndicator(color: AppColors.primary));
+    }
+    return SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,38 +123,34 @@ class _AdminDashboardScreenState
                         height: 50,
                         decoration: BoxDecoration(
                           color: AppColors.primaryLight,
-                          borderRadius:
-                              BorderRadius.circular(25),
+                          borderRadius: BorderRadius.circular(25),
                         ),
                         child: const Icon(Icons.person,
                             color: AppColors.primary),
                       ),
                       const SizedBox(width: 12),
                       Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          const Text('Hello, Admin',
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('Hello, Admin',
                               style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.primaryDark)),
-                          const Text('Super Admin',
+                          Text('Super Admin',
                               style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.grey)),
+                                  fontSize: 12, color: AppColors.grey)),
                         ],
                       ),
                     ],
                   ),
                   const SizedBox(height: 24),
 
-                  // ── Stats Grid ──
+                  // ── Stats Grid — now shows real values like Analytics ──
                   GridView.count(
                     crossAxisCount: 2,
                     shrinkWrap: true,
-                    physics:
-                        const NeverScrollableScrollPhysics(),
+                    physics: const NeverScrollableScrollPhysics(),
                     mainAxisSpacing: 16,
                     crossAxisSpacing: 16,
                     childAspectRatio: 1.4,
@@ -191,6 +183,29 @@ class _AdminDashboardScreenState
                         AppColors.orange,
                         const Color(0xFFFFEDD5),
                       ),
+                      _buildStatCard(
+                        'Cancelled Sessions',
+                        '$_cancelledSessions',
+                        Icons.cancel_rounded,
+                        AppColors.red,
+                        const Color(0xFFFEE2E2),
+                      ),
+                      // ✅ NEW: Total Feedback card
+                      _buildStatCard(
+                        'Total Feedback',
+                        '$_totalFeedback',
+                        Icons.feedback_rounded,
+                        AppColors.primary,
+                        AppColors.primaryLight,
+                      ),
+                      // ✅ NEW: Avg Rating card
+                      _buildStatCard(
+                        'Avg Rating',
+                        '${_avgRating.toStringAsFixed(1)} ★',
+                        Icons.star_rounded,
+                        const Color(0xFFF59E0B),
+                        const Color(0xFFFEF3C7),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -206,8 +221,7 @@ class _AdminDashboardScreenState
                   GridView.count(
                     crossAxisCount: 2,
                     shrinkWrap: true,
-                    physics:
-                        const NeverScrollableScrollPhysics(),
+                    physics: const NeverScrollableScrollPhysics(),
                     mainAxisSpacing: 16,
                     crossAxisSpacing: 16,
                     childAspectRatio: 1.3,
@@ -218,32 +232,35 @@ class _AdminDashboardScreenState
                         AppColors.primary,
                         AppColors.primaryLight,
                         () => Navigator.push(
-  context,
-  MaterialPageRoute(
-      builder: (_) => const AdminExaminationScreen()),
-),
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const AdminExaminationScreen()),
+                        ),
                       ),
-                     _buildActionCard(
-  'Appointments',
-  Icons.calendar_today_rounded,
-  AppColors.blue,
-  const Color(0xFFDBEAFE),
-  () => Navigator.push(
-    context,
-    MaterialPageRoute(
-        builder: (_) => const AdminAppointmentsScreen()),
-  ),
-),
+                      _buildActionCard(
+                        'Appointments',
+                        Icons.calendar_today_rounded,
+                        AppColors.blue,
+                        const Color(0xFFDBEAFE),
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const AdminAppointmentsScreen()),
+                        ),
+                      ),
                       _buildActionCard(
                         'Analytics',
                         Icons.bar_chart_rounded,
                         AppColors.green,
                         const Color(0xFFDCFCE7),
                         () => Navigator.push(
-  context,
-  MaterialPageRoute(
-      builder: (_) => const AdminAnalyticsScreen()),
-),
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const AdminAnalyticsScreen()),
+                        ),
                       ),
                       _buildActionCard(
                         'Feedback',
@@ -251,10 +268,11 @@ class _AdminDashboardScreenState
                         AppColors.orange,
                         const Color(0xFFFFEDD5),
                         () => Navigator.push(
-  context,
-  MaterialPageRoute(
-      builder: (_) => const AdminFeedbackScreen()),
-),
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const AdminFeedbackScreen()),
+                        ),
                       ),
                     ],
                   ),
@@ -274,50 +292,53 @@ class _AdminDashboardScreenState
                               fontWeight: FontWeight.w600,
                               fontSize: 16)),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                            color: AppColors.primary),
+                        side: const BorderSide(color: AppColors.primary),
                         shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(12)),
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ),
                   const SizedBox(height: 30),
                 ],
               ),
+            );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminCsvScreen()),
+              ),
+              backgroundColor: AppColors.primary,
+              icon: const Icon(Icons.download_rounded, color: AppColors.white),
+              label: const Text('CSV Report',
+                  style: TextStyle(
+                      color: AppColors.white, fontWeight: FontWeight.w600)),
             ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) =>
-            setState(() => _selectedIndex = index),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.grey,
-        backgroundColor: AppColors.white,
-        elevation: 10,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: 'Home',
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        automaticallyImplyLeading: false,
+        title: const Text('Admin Dashboard',
+            style: TextStyle(
+                color: AppColors.white, fontWeight: FontWeight.w700)),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.white),
+            onPressed: _loadStats,
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.assignment_rounded),
-            label: 'Examination',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_rounded),
-            label: 'Appointments',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_rounded),
-            label: 'Analytics',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.feedback_rounded),
-            label: 'Feedback',
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined,
+                color: AppColors.white),
+            onPressed: () {},
           ),
         ],
       ),
+      body: _buildBody(),
     );
   }
 
@@ -364,8 +385,7 @@ class _AdminDashboardScreenState
                       color: color)),
               Text(title,
                   style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.grey)),
+                      fontSize: 11, color: AppColors.grey)),
             ],
           ),
         ],
