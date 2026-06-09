@@ -120,6 +120,47 @@ class _AdminAppointmentsScreenState
     }
   }
 
+  // ─── Show student details popup ───────────────────────────
+  Future<void> _showStudentDetails(
+      BuildContext context, Map<String, dynamic> appt) async {
+    // Try to find student by studentId field first, then by name
+    final studentId = appt['studentId'] ?? appt['userId'] ?? '';
+    final studentName = appt['studentName'] ?? '';
+
+    Map<String, dynamic>? studentData;
+
+    try {
+      // Try fetching by document ID
+      if (studentId.isNotEmpty) {
+        final doc = await FirebaseFirestore.instance
+            .collection('students')
+            .doc(studentId)
+            .get();
+        if (doc.exists) studentData = doc.data();
+      }
+
+      // Fallback: query by name
+      if (studentData == null && studentName.isNotEmpty) {
+        final snap = await FirebaseFirestore.instance
+            .collection('students')
+            .where('name', isEqualTo: studentName)
+            .limit(1)
+            .get();
+        if (snap.docs.isNotEmpty) studentData = snap.docs.first.data();
+      }
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (_) => _StudentDetailsDialog(
+        appt: appt,
+        studentData: studentData,
+      ),
+    );
+  }
+
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'confirmed': return AppColors.green;
@@ -195,6 +236,8 @@ class _AdminAppointmentsScreenState
                             onCancel: () =>
                                 _cancelAppointment(
                                     appt['id']),
+                            onViewDetails: () =>
+                                _showStudentDetails(context, appt),
                           );
                         },
                       ),
@@ -217,6 +260,8 @@ class _AdminAppointmentsScreenState
                             isPast: true,
                             onComplete: () {},
                             onCancel: () {},
+                            onViewDetails: () =>
+                                _showStudentDetails(context, appt),
                           );
                         },
                       ),
@@ -249,6 +294,7 @@ class _AppointmentCard extends StatelessWidget {
   final bool isPast;
   final VoidCallback onComplete;
   final VoidCallback onCancel;
+  final VoidCallback onViewDetails;
 
   const _AppointmentCard({
     required this.appt,
@@ -257,6 +303,7 @@ class _AppointmentCard extends StatelessWidget {
     required this.isPast,
     required this.onComplete,
     required this.onCancel,
+    required this.onViewDetails,
   });
 
   @override
@@ -390,7 +437,7 @@ class _AppointmentCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: () {},
+                onPressed: onViewDetails,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
                   side: const BorderSide(
@@ -406,6 +453,163 @@ class _AppointmentCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ─── Student Details Dialog ────────────────────────────────
+class _StudentDetailsDialog extends StatelessWidget {
+  final Map<String, dynamic> appt;
+  final Map<String, dynamic>? studentData;
+
+  const _StudentDetailsDialog({
+    required this.appt,
+    required this.studentData,
+  });
+
+  Widget _row(String label, String value, IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.grey)),
+                const SizedBox(height: 2),
+                Text(value.isEmpty ? '—' : value,
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primaryDark)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = studentData ?? {};
+    final name = s['name'] ?? appt['studentName'] ?? 'Student';
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : 'S';
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Avatar
+              Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                  color: AppColors.primaryLight,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(initials,
+                      style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(name,
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primaryDark)),
+              const SizedBox(height: 4),
+              Text(s['department'] ?? appt['department'] ?? '',
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.grey)),
+              const SizedBox(height: 20),
+              const Divider(),
+              const SizedBox(height: 16),
+
+              // Student fields from Firestore
+              if (studentData == null)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    'Student record not found in database.',
+                    style: TextStyle(color: AppColors.grey, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              else ...[
+                _row('Full Name', s['name']?.toString() ?? '', Icons.person_rounded, AppColors.primary),
+                _row('Email', s['email']?.toString() ?? '', Icons.email_rounded, AppColors.blue),
+                _row('Phone', (s['phone'] ?? s['mobile'] ?? '').toString(), Icons.phone_rounded, AppColors.green),
+                _row('Department', s['department']?.toString() ?? '', Icons.school_rounded, AppColors.orange),
+                _row('Semester / Year', (s['semester'] ?? s['year'] ?? '').toString(), Icons.menu_book_rounded, AppColors.primary),
+                _row('Register No.', (s['registerNo'] ?? s['registrationNumber'] ?? s['rollNo'] ?? '').toString(), Icons.badge_rounded, AppColors.blue),
+                if ((s['address'] ?? '').toString().isNotEmpty)
+                  _row('Address', s['address'].toString(), Icons.location_on_rounded, AppColors.red),
+              ],
+
+              // Appointment info
+              const Divider(),
+              const SizedBox(height: 12),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Appointment Info',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryDark)),
+              ),
+              const SizedBox(height: 12),
+              _row('Date & Time',
+                  '${appt['date'] ?? ''} • ${appt['time'] ?? ''}',
+                  Icons.calendar_today_rounded, AppColors.primary),
+              _row('Slot', appt['slot']?.toString() ?? '',
+                  Icons.access_time_rounded, AppColors.orange),
+              _row('Status',
+                  (appt['status'] ?? '').toString().toUpperCase(),
+                  Icons.info_rounded, AppColors.green),
+
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text('Close',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
