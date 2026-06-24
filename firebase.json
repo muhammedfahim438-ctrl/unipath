@@ -1,16 +1,25 @@
-{
+﻿{
+  "hosting": {
+    "public": "build/web",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "**", "destination": "/index.html" }
+    ],
+    "headers": [
+      {
+        "source": "**/*.js",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        ]
+      }
+    ]
+  },
   "functions": [
     {
       "source": "functions",
       "codebase": "default",
       "runtime": "python312",
-      "ignore": [
-        "__pycache__",
-        "*.pyc",
-        ".venv",
-        "venv",
-        ".env.local"
-      ]
+      "ignore": ["__pycache__", "*.pyc", ".venv", "venv", ".env.local"]
     }
   ],
   "flutter": {
