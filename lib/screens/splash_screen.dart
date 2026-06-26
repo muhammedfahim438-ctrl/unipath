@@ -1,5 +1,5 @@
 ﻿import 'package:flutter/material.dart';
-import '../theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import 'welcome_screen.dart';
 import 'dashboard_screen.dart';
@@ -16,24 +16,22 @@ class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
-  late Animation<double> _slideAnim;
+  late Animation<double> _scaleAnim;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1400),
     );
     _fadeAnim = CurvedAnimation(
         parent: _controller, curve: Curves.easeIn);
-    _slideAnim = Tween<double>(begin: 30, end: 0).animate(
+    _scaleAnim = Tween<double>(begin: 0.85, end: 1.0).animate(
       CurvedAnimation(
-          parent: _controller, curve: Curves.easeOut),
+          parent: _controller, curve: Curves.easeOutBack),
     );
     _controller.forward();
-
-    // Auto navigate after 3 seconds
     _autoNavigate();
   }
 
@@ -43,37 +41,51 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
-  // ─── Auto navigate based on login status ──────────────────
   Future<void> _autoNavigate() async {
     await Future.delayed(const Duration(seconds: 3));
     if (!mounted) return;
 
+    // ── Step 1: Firebase Auth (works on mobile) ──
     final user = AuthService.currentUser;
-
-    if (user == null) {
-      // Not logged in → Welcome screen
-      _navigateTo(const WelcomeScreen());
-      return;
+    if (user != null) {
+      if (user.email != null && user.phoneNumber == null) {
+        _navigateTo(const AdminDashboardScreen());
+        return;
+      }
+      final mobile = user.phoneNumber ?? '';
+      final exists = await AuthService.profileExists(mobile);
+      if (!mounted) return;
+      if (exists) {
+        _navigateTo(const DashboardScreen());
+        return;
+      }
     }
 
-    // Check if admin (email login)
-    if (user.email != null && user.phoneNumber == null) {
-      // Admin user
+    // ── Step 2: SharedPreferences (web + mobile restart) ──
+    final prefs = await SharedPreferences.getInstance();
+
+    // Check admin session
+    final adminEmail = prefs.getString('admin_email');
+    if (adminEmail != null && adminEmail.isNotEmpty) {
+      if (!mounted) return;
       _navigateTo(const AdminDashboardScreen());
       return;
     }
 
-    // Student user — check profile exists
-    final mobile = user.phoneNumber ?? '';
-    final profileExists =
-        await AuthService.profileExists(mobile);
-
-    if (!mounted) return;
-    if (profileExists) {
-      _navigateTo(const DashboardScreen());
-    } else {
-      _navigateTo(const WelcomeScreen());
+    // Check student session
+    final savedMobile = prefs.getString('loggedInMobile');
+    if (savedMobile != null && savedMobile.isNotEmpty) {
+      final exists = await AuthService.profileExists(savedMobile);
+      if (!mounted) return;
+      if (exists) {
+        _navigateTo(const DashboardScreen());
+        return;
+      }
     }
+
+    // ── Step 3: Not logged in ──
+    if (!mounted) return;
+    _navigateTo(const WelcomeScreen());
   }
 
   void _navigateTo(Widget screen) {
@@ -87,120 +99,96 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeAnim,
-          child: AnimatedBuilder(
-            animation: _slideAnim,
-            builder: (context, child) =>
-                Transform.translate(
-              offset: Offset(0, _slideAnim.value),
-              child: child,
-            ),
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 32),
-              child: Column(
-                children: [
-                  const Spacer(flex: 2),
-
-                  // ── Logo ──
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primaryLight,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.school_rounded,
-                      size: 52,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // ── NASC Badge ──
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius:
-                          BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'NASC',
-                      style: TextStyle(
-                        color: AppColors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        letterSpacing: 2,
+      backgroundColor: const Color(0xFF3B0764),
+      body: FadeTransition(
+        opacity: _fadeAnim,
+        child: ScaleTransition(
+          scale: _scaleAnim,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // ── Logo ──
+                Container(
+                  width: 110,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
                       ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: Image.asset(
+                      'assets/icon/app_icon.png',
+                      fit: BoxFit.cover,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                ),
+                const SizedBox(height: 24),
 
-                  // ── App Name ──
-                  const Text(
-                    'UniPath',
+                // ── NASC Badge ──
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3)),
+                  ),
+                  child: const Text(
+                    'NASC',
                     style: TextStyle(
-                      color: AppColors.primaryDark,
-                      fontSize: 40,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -1,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      letterSpacing: 3,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                ),
+                const SizedBox(height: 14),
 
-                  // ── Tagline ──
-                  const Text(
-                    '"Your path to university and future success"',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.grey,
-                      fontSize: 14,
-                      fontStyle: FontStyle.italic,
-                      height: 1.5,
-                    ),
+                // ── App Name ──
+                const Text(
+                  'UniPath',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 42,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -1,
                   ),
-                  const SizedBox(height: 40),
+                ),
+                const SizedBox(height: 8),
 
-                  // ── University illustration ──
-                  Container(
-                    height: 180,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
-                      borderRadius:
-                          BorderRadius.circular(24),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                          Icons.account_balance_rounded,
-                          size: 80,
-                          color: AppColors.primary),
-                    ),
+                // ── Tagline ──
+                const Text(
+                  '"Your path to university and future success"',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Color(0xFFD8B4FE),
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
                   ),
+                ),
+                const SizedBox(height: 60),
 
-                  const Spacer(flex: 2),
-
-                  // ── Loading indicator ──
-                  const CircularProgressIndicator(
-                    color: AppColors.primary,
-                    strokeWidth: 2,
+                // ── Loading ──
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.5,
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Loading...',
-                    style: TextStyle(
-                        color: AppColors.grey,
-                        fontSize: 13),
-                  ),
-                  const SizedBox(height: 40),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

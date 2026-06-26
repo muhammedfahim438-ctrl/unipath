@@ -8,6 +8,7 @@ import 'admin_examination_screen.dart';
 import 'admin_feedback_screen.dart';
 import 'admin_analytics_screen.dart';
 import 'admin_csv_screen.dart';
+import 'admin_students_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -274,6 +275,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   const AdminFeedbackScreen()),
                         ),
                       ),
+                      _buildActionCard(
+  'Students',
+  Icons.people_rounded,
+  AppColors.primary,
+  AppColors.primaryLight,
+  () => Navigator.push(
+    context,
+    MaterialPageRoute(
+        builder: (_) => const AdminStudentsScreen()),
+  ),
+),
                     ],
                   ),
                   const SizedBox(height: 24),
