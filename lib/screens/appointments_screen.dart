@@ -332,10 +332,10 @@ class _UpcomingCard extends StatelessWidget {
                     ]),
                     const SizedBox(height: 4),
                     Row(children: [
-                      const Icon(Icons.event_seat_rounded,
+                      const Icon(Icons.person_rounded,
                           size: 13, color: AppColors.grey),
                       const SizedBox(width: 4),
-                      Text(appointment['slot'] ?? '',
+                      Text(appointment['counsellor'] ?? '',
                           style: const TextStyle(
                               color: AppColors.grey,
                               fontSize: 12)),

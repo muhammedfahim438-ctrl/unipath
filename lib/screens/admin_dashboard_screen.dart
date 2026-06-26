@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
 import 'welcome_screen.dart';
 import '../services/auth_service.dart';
-import 'admin_appointments_screen.dart';
+import 'admin_counsellor_select_screen.dart';
 import 'admin_examination_screen.dart';
 import 'admin_feedback_screen.dart';
 import 'admin_analytics_screen.dart';
@@ -248,7 +248,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           context,
                           MaterialPageRoute(
                               builder: (_) =>
-                                  const AdminAppointmentsScreen()),
+                                  const AdminCounsellorSelectScreen()),
                         ),
                       ),
                       _buildActionCard(

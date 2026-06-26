@@ -3,7 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
 
 class AdminAppointmentsScreen extends StatefulWidget {
-  const AdminAppointmentsScreen({super.key});
+  // null = show all appointments, regardless of counsellor
+  final String? counsellorFilter;
+
+  const AdminAppointmentsScreen({super.key, this.counsellorFilter});
 
   @override
   State<AdminAppointmentsScreen> createState() =>
@@ -45,6 +48,14 @@ class _AdminAppointmentsScreenState
       for (final doc in snapshot.docs) {
         final data = doc.data();
         data['id'] = doc.id;
+
+        // ── Filter by counsellor if one was selected ──
+        // (filtered client-side so no Firestore composite index
+        // is required for counsellor + orderBy(createdAt))
+        if (widget.counsellorFilter != null &&
+            data['counsellor'] != widget.counsellorFilter) {
+          continue;
+        }
 
         final status = data['status'] ?? 'pending';
         if (status == 'completed' || status == 'cancelled') {
@@ -145,11 +156,22 @@ class _AdminAppointmentsScreenState
               color: AppColors.primaryDark),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Appointments',
-            style: TextStyle(
-                color: AppColors.primaryDark,
-                fontWeight: FontWeight.w800,
-                fontSize: 18)),
+        title: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Appointments',
+                style: TextStyle(
+                    color: AppColors.primaryDark,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18)),
+            if (widget.counsellorFilter != null)
+              Text(widget.counsellorFilter!,
+                  style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11)),
+          ],
+        ),
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primary,
@@ -316,7 +338,7 @@ class _AppointmentCard extends StatelessWidget {
                             fontSize: 12)),
                     const SizedBox(height: 4),
                     Text(
-                        'Slot: ${appt['slot'] ?? ''} • ${appt['department'] ?? ''}',
+                        'Counsellor: ${appt['counsellor'] ?? ''} • ${appt['department'] ?? ''}',
                         style: const TextStyle(
                             color: AppColors.grey,
                             fontSize: 11),

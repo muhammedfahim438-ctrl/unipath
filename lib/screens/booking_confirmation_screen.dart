@@ -5,14 +5,14 @@ import 'dashboard_screen.dart';
 class BookingConfirmationScreen extends StatelessWidget {
   final String date;
   final String time;
-  final String slot;
+  final String counsellor;
   final String session;
 
   const BookingConfirmationScreen({
     super.key,
     required this.date,
     required this.time,
-    required this.slot,
+    required this.counsellor,
     required this.session,
   });
 
@@ -63,7 +63,7 @@ class BookingConfirmationScreen extends StatelessWidget {
                         Icons.access_time_rounded, 'Time', time),
                     const SizedBox(height: 12),
                     _buildDetailRow(
-                        Icons.event_seat_rounded, 'Slot', slot),
+                        Icons.person_rounded, 'Counsellor', counsellor),
                     const SizedBox(height: 12),
                     _buildDetailRow(
                         Icons.psychology_rounded, 'Session', session),

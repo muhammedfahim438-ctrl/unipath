@@ -21,8 +21,12 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
   late DateTime _focusedMonth;
   DateTime? _selectedDate;
   String? _selectedTime;
-  int? _selectedSlot;
+  String? _selectedCounsellor;
   bool _isLoading = false;
+
+  // ── Times already booked (by anyone) for the selected date ──
+  Set<String> _bookedTimes = {};
+  bool _isCheckingTimes = false;
 
   // ✅ FIX 2: Compute today and the 30-day deadline once
   final DateTime _today = DateTime(
@@ -47,7 +51,13 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
     '05:00 PM',
   ];
 
-  final List<String> _slots = ['Slot 1', 'Slot 2', 'Slot 3', 'Slot 4'];
+  final List<String> _counsellors = [
+    'Showmiya SHA',
+    'Dr. Rekha B. Raveendran',
+    'Ms. Nivedha S',
+    'Mr. Kiran Prasadh',
+    'Mr. Dhanush Prabhu Ram P K',
+  ];
 
   // ✅ FIX 3: Block going to a month before the current month
   void _previousMonth() {
@@ -115,10 +125,51 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
     return days;
   }
 
+  // ── Fetch which times are already booked for a given date ──
+  Future<void> _loadBookedTimes(DateTime date) async {
+    final dateStr = '${date.day} ${_monthName(date.month)} ${date.year}';
+    setState(() => _isCheckingTimes = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('appointments')
+          .where('date', isEqualTo: dateStr)
+          .get();
+
+      final taken = <String>{};
+      for (final doc in snap.docs) {
+        final status = doc.data()['status'] as String? ?? 'pending';
+        if (status != 'cancelled') {
+          final time = doc.data()['time'] as String?;
+          if (time != null) taken.add(time);
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _bookedTimes = taken;
+        // If the previously selected time just became unavailable
+        // (e.g. someone else booked it while this screen was open),
+        // deselect it.
+        if (_selectedTime != null && _bookedTimes.contains(_selectedTime)) {
+          _selectedTime = null;
+        }
+        _isCheckingTimes = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isCheckingTimes = false);
+    }
+  }
+
   Future<void> _confirmBooking() async {
     if (_selectedDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select a date')));
+      return;
+    }
+    if (_selectedCounsellor == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a counsellor')));
       return;
     }
     if (_selectedTime == null) {
@@ -126,23 +177,45 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
           const SnackBar(content: Text('Please select a time')));
       return;
     }
-    if (_selectedSlot == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a slot')));
-      return;
-    }
 
     setState(() => _isLoading = true);
 
     try {
+      final dateStr =
+          '${_selectedDate!.day} ${_monthName(_selectedDate!.month)} ${_selectedDate!.year}';
+
+      // ── Check if this date+time is already booked by anyone ──
+      // (cancelled appointments don't count as taken, so a freed
+      // slot becomes available again)
+      final existing = await FirebaseFirestore.instance
+          .collection('appointments')
+          .where('date', isEqualTo: dateStr)
+          .where('time', isEqualTo: _selectedTime)
+          .get();
+
+      final isTaken = existing.docs.any((doc) {
+        final status = doc.data()['status'] as String? ?? 'pending';
+        return status != 'cancelled';
+      });
+
+      if (isTaken) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'This time slot is already booked. Please choose another time.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       final cached = await AuthService.getCachedProfile();
       final studentName = cached?['name'] ?? 'Student';
       final studentDept = cached?['department'] ?? '';
       final studentMobile = cached?['mobile'] ?? '';
       final studentYear = cached?['year'] ?? '';
-
-      final dateStr =
-          '${_selectedDate!.day} ${_monthName(_selectedDate!.month)} ${_selectedDate!.year}';
 
       await FirebaseFirestore.instance.collection('appointments').add({
         'studentName': studentName,
@@ -152,7 +225,7 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
         'date': dateStr,
         'dateTimestamp': _selectedDate,
         'time': _selectedTime,
-        'slot': _slots[_selectedSlot!],
+        'counsellor': _selectedCounsellor,
         'session': 'Counselling Session',
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
@@ -162,7 +235,7 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
         studentName: studentName,
         date: dateStr,
         time: _selectedTime!,
-        slot: _slots[_selectedSlot!],
+        counsellor: _selectedCounsellor!,
       );
 
       if (!mounted) return;
@@ -174,7 +247,7 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
           builder: (_) => BookingConfirmationScreen(
             date: dateStr,
             time: _selectedTime!,
-            slot: _slots[_selectedSlot!],
+            counsellor: _selectedCounsellor!,
             session: 'Counselling Session',
           ),
         ),
@@ -195,17 +268,18 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
     required String studentName,
     required String date,
     required String time,
-    required String slot,
+    required String counsellor,
   }) async {
     try {
       await FirebaseFirestore.instance.collection('notifications').add({
         'type': 'new_booking',
         'title': 'New Counselling Booking',
-        'message': '$studentName has booked a session on $date at $time ($slot)',
+        'message':
+            '$studentName has booked a session on $date at $time with $counsellor',
         'studentName': studentName,
         'date': date,
         'time': time,
-        'slot': slot,
+        'counsellor': counsellor,
         'isRead': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -370,7 +444,13 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
                       return GestureDetector(
                         onTap: isDisabled
                             ? null
-                            : () => setState(() => _selectedDate = day),
+                            : () {
+                                setState(() {
+                                  _selectedDate = day;
+                                  _selectedTime = null;
+                                });
+                                _loadBookedTimes(day);
+                              },
                         child: Container(
                           decoration: BoxDecoration(
                             color: isSelected
@@ -409,8 +489,81 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
             const SizedBox(height: 24),
 
             // ── Select Time ──
+            Row(
+              children: [
+                const Text(
+                  'Select Time',
+                  style: TextStyle(
+                    color: AppColors.primaryDark,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (_isCheckingTimes) ...[
+                  const SizedBox(width: 10),
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppColors.primary),
+                  ),
+                ],
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _times.map((time) {
+                final isSelected = _selectedTime == time;
+                final isBooked = _bookedTimes.contains(time);
+                return GestureDetector(
+                  onTap: isBooked
+                      ? null
+                      : () => setState(() => _selectedTime = time),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isBooked
+                          ? AppColors.greyLight.withValues(alpha: 0.5)
+                          : isSelected
+                              ? AppColors.primary
+                              : AppColors.greyLight,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isSelected && !isBooked
+                            ? AppColors.primary
+                            : Colors.transparent,
+                      ),
+                    ),
+                    child: Text(
+                      time,
+                      style: TextStyle(
+                        color: isBooked
+                            ? AppColors.grey.withValues(alpha: 0.5)
+                            : isSelected
+                                ? AppColors.white
+                                : AppColors.primaryDark,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        decoration: isBooked
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── Select Counsellor ──
             const Text(
-              'Select Time',
+              'Select Counsellor',
               style: TextStyle(
                 color: AppColors.primaryDark,
                 fontSize: 15,
@@ -423,16 +576,18 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
             Wrap(
               spacing: 10,
               runSpacing: 10,
-              children: _times.map((time) {
-                final isSelected = _selectedTime == time;
+              children: _counsellors.map((counsellor) {
+                final isSelected = _selectedCounsellor == counsellor;
                 return GestureDetector(
-                  onTap: () => setState(() => _selectedTime = time),
+                  onTap: () =>
+                      setState(() => _selectedCounsellor = counsellor),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                        horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color:
-                          isSelected ? AppColors.primary : AppColors.greyLight,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.greyLight,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isSelected
@@ -441,7 +596,7 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
                       ),
                     ),
                     child: Text(
-                      time,
+                      counsellor,
                       style: TextStyle(
                         color: isSelected
                             ? AppColors.white
@@ -453,54 +608,6 @@ class _BookCounsellingScreenState extends State<BookCounsellingScreen> {
                   ),
                 );
               }).toList(),
-            ),
-
-            const SizedBox(height: 24),
-
-            // ── Select Slot ──
-            const Text(
-              'Select Slot',
-              style: TextStyle(
-                color: AppColors.primaryDark,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            Row(
-              children: List.generate(_slots.length, (index) {
-                final isSelected = _selectedSlot == index;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _selectedSlot = index),
-                    child: Container(
-                      margin: EdgeInsets.only(
-                          right: index < _slots.length - 1 ? 10 : 0),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.primary
-                            : AppColors.greyLight,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(
-                          _slots[index],
-                          style: TextStyle(
-                            color: isSelected
-                                ? AppColors.white
-                                : AppColors.primaryDark,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
             ),
 
             const SizedBox(height: 32),
