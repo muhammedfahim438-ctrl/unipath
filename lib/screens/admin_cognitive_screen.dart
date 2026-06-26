@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'package:web/web.dart' as web;
-import 'dart:js_interop';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 // ─────────────────────────────────────────
 //  Admin Cognitive Screen
@@ -268,19 +268,14 @@ class _AdminCognitiveScreenState extends State<AdminCognitiveScreen>
     }
 
     final bytes = utf8.encode(buffer.toString());
-    final jsArray = bytes.map((b) => b.toJS).toList();
-    final blob = web.Blob(
-      [jsArray.toJS].toJS,
-      web.BlobPropertyBag(type: 'text/csv'),
-    );
-    final url = web.URL.createObjectURL(blob);
-    final anchor = web.document.createElement('a') as web.HTMLAnchorElement
-      ..href = url
+    final blob = html.Blob([bytes], 'text/csv');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.AnchorElement(href: url)
       ..setAttribute(
           'download',
-          'cognitive_results_${DateTime.now().toIso8601String().substring(0, 10)}.csv')
+          'cognitive_results_\${DateTime.now().toIso8601String().substring(0, 10)}.csv')
       ..click();
-    web.URL.revokeObjectURL(url);
+    html.Url.revokeObjectUrl(url);
     anchor.remove();
 
     _showSnack('CSV downloaded!');
@@ -451,7 +446,7 @@ class _AdminCognitiveScreenState extends State<AdminCognitiveScreen>
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: _departments.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (_, i) {
                     final dept = _departments[i];
                     final selected = _filterDept == dept;
