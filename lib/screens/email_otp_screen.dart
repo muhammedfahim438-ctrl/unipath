@@ -110,6 +110,11 @@ class _EmailOTPScreenState
       if (!mounted) return;
 
       if (profile != null) {
+        // ✅ Save student email session so splash screen
+        // can restore login after app restart
+        await AuthService.saveLoggedInEmail(widget.email);
+
+        if (!mounted) return;
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(

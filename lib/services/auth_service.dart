@@ -225,6 +225,10 @@ class AuthService {
   // ─── Logout ────────────────────────────────────────────────
   static Future<void> logout() async {
     await clearCache();
+    await clearLoggedInEmail();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('loggedInMobile');
+    await prefs.remove('admin_email');
     await _auth.signOut();
   }
 
@@ -334,15 +338,34 @@ class AuthService {
     }
     return null;
   }
-  // ─── Save logged-in mobile to prefs ───────────────────────
-static Future<void> saveLoggedInMobile(String mobile) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('loggedInMobile', mobile);
-}
 
-// ─── Get logged-in mobile from prefs ──────────────────────
-static Future<String?> getLoggedInMobile() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('loggedInMobile');
-}
+  // ─── Save logged-in mobile to prefs ───────────────────────
+  static Future<void> saveLoggedInMobile(String mobile) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('loggedInMobile', mobile);
+  }
+
+  // ─── Get logged-in mobile from prefs ──────────────────────
+  static Future<String?> getLoggedInMobile() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('loggedInMobile');
+  }
+
+  // ─── Save logged-in email to prefs ────────────────────────
+  static Future<void> saveLoggedInEmail(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('loggedInEmail', email);
+  }
+
+  // ─── Get logged-in email from prefs ───────────────────────
+  static Future<String?> getLoggedInEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('loggedInEmail');
+  }
+
+  // ─── Clear logged-in email from prefs ─────────────────────
+  static Future<void> clearLoggedInEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('loggedInEmail');
+  }
 }

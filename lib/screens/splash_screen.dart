@@ -48,16 +48,20 @@ class _SplashScreenState extends State<SplashScreen>
     // ── Step 1: Firebase Auth (works on mobile) ──
     final user = AuthService.currentUser;
     if (user != null) {
+      // Admin: signed in with email (no phone number)
       if (user.email != null && user.phoneNumber == null) {
         _navigateTo(const AdminDashboardScreen());
         return;
       }
+      // Student: signed in with phone number
       final mobile = user.phoneNumber ?? '';
-      final exists = await AuthService.profileExists(mobile);
-      if (!mounted) return;
-      if (exists) {
-        _navigateTo(const DashboardScreen());
-        return;
+      if (mobile.isNotEmpty) {
+        final exists = await AuthService.profileExists(mobile);
+        if (!mounted) return;
+        if (exists) {
+          _navigateTo(const DashboardScreen());
+          return;
+        }
       }
     }
 
@@ -72,7 +76,25 @@ class _SplashScreenState extends State<SplashScreen>
       return;
     }
 
-    // Check student session
+    // ── Check student email session (email OTP login) ──
+    final savedEmail = prefs.getString('loggedInEmail');
+    if (savedEmail != null && savedEmail.isNotEmpty) {
+      final exists =
+          await AuthService.profileExistsByEmail(savedEmail);
+      if (!mounted) return;
+      if (exists) {
+        // Restore profile cache
+        await AuthService.getStudentProfileByEmail(savedEmail);
+        if (!mounted) return;
+        _navigateTo(const DashboardScreen());
+        return;
+      } else {
+        // Profile not found — clear stale session
+        await prefs.remove('loggedInEmail');
+      }
+    }
+
+    // ── Check student mobile session (phone OTP login, backward compat) ──
     final savedMobile = prefs.getString('loggedInMobile');
     if (savedMobile != null && savedMobile.isNotEmpty) {
       final exists = await AuthService.profileExists(savedMobile);
@@ -80,6 +102,9 @@ class _SplashScreenState extends State<SplashScreen>
       if (exists) {
         _navigateTo(const DashboardScreen());
         return;
+      } else {
+        // Profile not found — clear stale session
+        await prefs.remove('loggedInMobile');
       }
     }
 
