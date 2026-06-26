@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
 import 'welcome_screen.dart';
 import '../services/auth_service.dart';
+import '../services/cleanup_service.dart';
 import 'admin_counsellor_select_screen.dart';
 import 'admin_examination_screen.dart';
 import 'admin_feedback_screen.dart';
@@ -34,6 +35,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void initState() {
     super.initState();
     _loadStats();
+    // Fire-and-forget: cleans up old completed/cancelled
+    // appointments (7+ days past their session date) in the
+    // background. Doesn't block the dashboard from loading.
+    CleanupService.runCleanup();
   }
 
   Future<void> _loadStats() async {
