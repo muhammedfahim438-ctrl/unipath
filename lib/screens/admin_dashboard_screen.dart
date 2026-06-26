@@ -10,6 +10,7 @@ import 'admin_feedback_screen.dart';
 import 'admin_analytics_screen.dart';
 import 'admin_csv_screen.dart';
 import 'admin_students_screen.dart';
+import 'admin_cognitive_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -289,6 +290,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     context,
     MaterialPageRoute(
         builder: (_) => const AdminStudentsScreen()),
+  ),
+),
+                      _buildActionCard(
+  'Cognitive Test',
+  Icons.psychology_rounded,
+  Color(0xFF7C3AED),
+  Color(0xFFEDE9FE),
+  () => Navigator.push(
+    context,
+    MaterialPageRoute(
+        builder: (_) => const AdminCognitiveScreen()),
   ),
 ),
                     ],

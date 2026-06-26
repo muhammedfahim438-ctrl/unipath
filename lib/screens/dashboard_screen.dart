@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:unipath/screens/quiz_screen.dart';
+import 'cognitive_quiz_screen.dart';
 import '../theme.dart';
 import 'book_counselling_screen.dart';
 import 'appointments_screen.dart';
@@ -479,6 +480,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               const SizedBox(height: 28),
 
+              // ── Cognitive Level Test Banner ──
+              _CognitiveLevelBanner(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const CognitiveQuizScreen()),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
               // ── Upcoming Appointment Banner ──
               // Only shown when the student has a real upcoming appointment
               if (_nextAppointment != null)
@@ -591,7 +603,164 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// ── Feature Card Widget ──
+// ── Cognitive Level Banner Widget ──
+class _CognitiveLevelBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CognitiveLevelBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF3B0764), Color(0xFF5B21B6), Color(0xFF7C3AED)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF5B21B6).withValues(alpha: 0.35),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Left: icon + decorative circle
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.psychology_rounded,
+                    color: AppColors.white,
+                    size: 30,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 16),
+
+            // Middle: text content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      '🧠  NEW TEST',
+                      style: TextStyle(
+                        color: AppColors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Cognitive Level Test',
+                    style: TextStyle(
+                      color: AppColors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Discover your cognitive strengths across 8 key areas',
+                    style: TextStyle(
+                      color: AppColors.white.withValues(alpha: 0.8),
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Stats row
+                  Row(
+                    children: [
+                      _StatChip(label: '20 Questions'),
+                      const SizedBox(width: 8),
+                      _StatChip(label: '10–12 mins'),
+                      const SizedBox(width: 8),
+                      _StatChip(label: '8 Domains'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Right: arrow button
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.arrow_forward_rounded,
+                color: AppColors.white,
+                size: 22,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  final String label;
+  const _StatChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
 class _FeatureCard extends StatelessWidget {
   final IconData icon;
   final String title;

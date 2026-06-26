@@ -45,6 +45,7 @@ dependencies:
   http: ^1.6.0
   pdf: ^3.13.0
   printing: ^5.15.0
+  web: ^1.1.0 
 
 dev_dependencies:
   flutter_test:
@@ -105,3 +106,4 @@ flutter_launcher_icons:
     android: true
     ios: true
     image_path: "assets/icon/app_icon.png"
+    

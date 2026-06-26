@@ -331,6 +331,11 @@ class AuthService {
       if (query.docs.isNotEmpty) {
         final data = query.docs.first.data();
         await _cacheProfile(data);
+        await saveLoggedInEmail(email); // ← persist email for quiz screens
+        final mobile = data['mobile'] as String? ?? '';
+        if (mobile.isNotEmpty) {
+          await saveLoggedInMobile(mobile);
+        }
         return data;
       }
     } catch (e) {
